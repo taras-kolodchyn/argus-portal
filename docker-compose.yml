@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:15.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KC_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KC_DB_USERNAME:-keycloak}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD:?KC_DB_PASSWORD must be set}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - keycloak-db:/var/lib/postgresql/data
+    networks:
+      - keycloak
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.2
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    command:
+      - start
+      - --http-enabled=true
+      - --https-port=${KC_HTTPS_PORT:-8443}
+      - --hostname=${KC_HOSTNAME:-127.0.0.1}
+      - --hostname-strict=false
+      - --spi-login-protocol-openid-connect-legacy-logout-redirect-uri=true
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: ${KC_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:?KC_DB_PASSWORD must be set}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?KEYCLOAK_ADMIN must be set}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD must be set}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "false"
+      KC_HTTP_RELATIVE_PATH: /
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/tls/tls.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/tls/tls.key
+    volumes:
+      - ./certs/keycloak:/opt/keycloak/conf/tls:ro
+      - keycloak-data:/opt/keycloak/data
+    ports:
+      - "${KC_HTTPS_PORT:-8443}:8443"
+    networks:
+      - keycloak
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k --fail https://localhost:8443/health/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  keycloak-db:
+  keycloak-data:
+
+networks:
+  keycloak:
+    driver: bridge
