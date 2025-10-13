@@ -63,7 +63,7 @@ export function ReportsPage(): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeIncident, setActiveIncident] = useState<ReportIncident | null>(null);
 
-  const incidents = data?.incidents ?? [];
+  const incidents = useMemo(() => data?.incidents ?? [], [data?.incidents]);
 
   const filtered = useMemo(
     () =>

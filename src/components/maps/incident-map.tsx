@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { MapContainer, CircleMarker, TileLayer, Tooltip } from "react-leaflet";
 
 import type { ReportIncident } from "@/hooks/useReportsData";
-import { useTheme } from "@/hooks/useTheme";
+import { useBasemapLayer } from "@/hooks/useBasemapLayer";
 import { cn } from "@/lib/utils";
 
 const ukraineCenter: [number, number] = [49.0, 31.5];
@@ -30,23 +30,7 @@ export function IncidentMap({
 }: IncidentMapProps): JSX.Element {
   const center = useMemo(() => ukraineCenter, []);
   const { t } = useTranslation();
-  const { resolved } = useTheme();
-
-  const tileLayer = useMemo(() => {
-    if (resolved === "dark") {
-      return {
-        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      };
-    }
-
-    return {
-      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    };
-  }, [resolved]);
+  const basemap = useBasemapLayer();
 
   return (
     <MapContainer
@@ -55,7 +39,7 @@ export function IncidentMap({
       scrollWheelZoom
       className={cn("h-[360px] w-full overflow-hidden rounded-xl border border-border", className)}
     >
-      <TileLayer key={resolved} attribution={tileLayer.attribution} url={tileLayer.url} />
+      <TileLayer key={basemap.key} attribution={basemap.attribution} url={basemap.url} />
       {incidents.map((incident) => {
         const color = statusColors[incident.status];
         const isSelected = selectedId === incident.id;

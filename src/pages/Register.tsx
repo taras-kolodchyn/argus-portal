@@ -1,7 +1,7 @@
 import type { ChangeEvent, FormEvent, JSX } from "react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Check, ShieldAlert, X } from "lucide-react";
 import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/useAuth";
 
 interface PasswordAnalysis {
   score: number;
@@ -56,6 +57,7 @@ function analysePassword(password: string, email: string): PasswordAnalysis {
 export function RegisterPage(): JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const auth = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -143,6 +145,17 @@ export function RegisterPage(): JSX.Element {
       setIsSubmitting(false);
     }
   };
+  if (auth.isEnabled && auth.isLoading) {
+    return (
+      <div className="flex justify-center py-10 text-sm text-muted-foreground">
+        {t("auth_loading")}
+      </div>
+    );
+  }
+
+  if (auth.isEnabled && auth.isAuthenticated) {
+    return <Navigate to="/profile" replace />;
+  }
 
   return (
     <div className="flex justify-center py-10">

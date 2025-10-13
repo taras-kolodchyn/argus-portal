@@ -1,4 +1,3 @@
-import { subMinutes } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 
 export const DASHBOARD_METRIC_IDS = ["aqi", "noise", "radiation", "water"] as const;
@@ -95,14 +94,12 @@ const METRICS_META: Record<MetricId, MetricMeta> = {
   },
 };
 
-const TREND_LENGTH = 24;
-const TREND_STEP_MINUTES = 30;
-
-interface MetricState {
-  trend: MetricTrendPoint[];
-}
-
-const metricState: Record<MetricId, MetricState> = initializeMetricState();
+const METRIC_SEEDS: Record<MetricId, number> = {
+  aqi: 0.3,
+  noise: 0.9,
+  radiation: 1.7,
+  water: 2.3,
+};
 
 interface SensorMeta {
   id: string;
@@ -162,47 +159,10 @@ const SENSOR_META: SensorMeta[] = [
   },
 ];
 
-const sensorState: Record<string, number> = initializeSensorState();
-
-function initializeMetricState(): Record<MetricId, MetricState> {
-  const now = new Date();
-
-  return DASHBOARD_METRIC_IDS.reduce((acc, id) => {
-    const meta = METRICS_META[id];
-    let value = meta.baseline;
-    const trend: MetricTrendPoint[] = Array.from({ length: TREND_LENGTH }, (_, index) => {
-      const timestamp = subMinutes(
-        now,
-        (TREND_LENGTH - index) * TREND_STEP_MINUTES,
-      );
-
-      if (index !== 0) {
-        value = nextValue(value, meta);
-      }
-
-      return {
-        timestamp: timestamp.toISOString(),
-        value: round(value, meta.decimals),
-      };
-    });
-
-    acc[id] = { trend };
-    return acc;
-  }, {} as Record<MetricId, MetricState>);
-}
-
-function initializeSensorState(): Record<string, number> {
-  return SENSOR_META.reduce((acc, sensor) => {
-    const meta = METRICS_META[sensor.metricId];
-    const baseline =
-      meta.baseline + (sensor.baselineOffset ?? (Math.random() - 0.5) * meta.volatility);
-    acc[sensor.id] = round(
-      clamp(baseline, meta.bounds[0], meta.bounds[1]),
-      meta.decimals,
-    );
-    return acc;
-  }, {} as Record<string, number>);
-}
+const TREND_LENGTH = 24;
+const TREND_STEP_MINUTES = 30;
+const MINUTE_IN_MS = 60 * 1000;
+const BASE_PERIOD_MS = 6 * 60 * MINUTE_IN_MS;
 
 function round(value: number, decimals: number): number {
   const factor = Math.pow(10, decimals);
@@ -213,14 +173,28 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function randomDrift(range: number): number {
-  return (Math.random() - 0.5) * range * 2;
+function computeMetricValue(
+  meta: MetricMeta,
+  timestamp: number,
+  seed: number,
+  baselineOffset = 0,
+): number {
+  const baseWave = Math.sin(timestamp / BASE_PERIOD_MS + seed) * meta.volatility * 1.4;
+  const secondary = Math.sin(timestamp / (BASE_PERIOD_MS / 2) + seed * 1.7) * meta.volatility * 0.8;
+  const micro = Math.cos(timestamp / (BASE_PERIOD_MS * 1.5) + seed * 2.3) * meta.volatility * 0.4;
+  const baseline = meta.baseline + baselineOffset;
+  const value = baseline + baseWave + secondary + micro;
+  return round(clamp(value, meta.bounds[0], meta.bounds[1]), meta.decimals);
 }
 
-function nextValue(previous: number, meta: MetricMeta): number {
-  const next = previous + randomDrift(meta.volatility);
-  const [min, max] = meta.bounds;
-  return round(clamp(next, min, max), meta.decimals);
+function generateMetricTrend(meta: MetricMeta, seed: number, reference: number): MetricTrendPoint[] {
+  return Array.from({ length: TREND_LENGTH }, (_, index) => {
+    const timestamp = reference - (TREND_LENGTH - index) * TREND_STEP_MINUTES * MINUTE_IN_MS;
+    return {
+      timestamp: new Date(timestamp).toISOString(),
+      value: computeMetricValue(meta, timestamp, seed),
+    };
+  });
 }
 
 function resolveStatus(id: MetricId, value: number): MetricStatus {
@@ -249,32 +223,21 @@ function resolveStatus(id: MetricId, value: number): MetricStatus {
 }
 
 function buildMetricsSnapshot(): DashboardMetricsSnapshot {
-  const now = new Date();
+  const now = Date.now();
 
   const metrics = DASHBOARD_METRIC_IDS.map((id) => {
     const meta = METRICS_META[id];
-    const state = metricState[id];
-    const previousTrend = state.trend;
-    const previousValue = previousTrend[previousTrend.length - 1]?.value ?? meta.baseline;
-
-    const nextMetricValue = nextValue(previousValue, meta);
-    const nextPoint: MetricTrendPoint = {
-      timestamp: now.toISOString(),
-      value: nextMetricValue,
-    };
-
-    const trend = [...previousTrend.slice(1), nextPoint];
-    metricState[id] = { trend };
-
-    const comparisonPoint = trend[trend.length - 2] ?? previousTrend[previousTrend.length - 1];
-    const delta = round(nextMetricValue - (comparisonPoint?.value ?? nextMetricValue), meta.decimals);
-    const status = resolveStatus(id, nextMetricValue);
+    const trend = generateMetricTrend(meta, METRIC_SEEDS[id], now);
+    const latest = trend[trend.length - 1]?.value ?? meta.baseline;
+    const previous = trend[trend.length - 2]?.value ?? latest;
+    const delta = round(latest - previous, meta.decimals);
+    const status = resolveStatus(id, latest);
 
     return {
       id,
       labelKey: meta.labelKey,
       unitKey: meta.unitKey,
-      value: nextMetricValue,
+      value: latest,
       delta,
       status,
       statusKey: METRIC_STATUS_LABELS[status],
@@ -284,21 +247,19 @@ function buildMetricsSnapshot(): DashboardMetricsSnapshot {
   });
 
   return {
-    updatedAt: now.toISOString(),
+    updatedAt: new Date(now).toISOString(),
     metrics,
   };
 }
 
 function buildSensorsSnapshot(): DashboardSensorsSnapshot {
-  const now = new Date();
+  const now = Date.now();
 
-  const sensors = SENSOR_META.map((sensor) => {
+  const sensors = SENSOR_META.map((sensor, index) => {
     const meta = METRICS_META[sensor.metricId];
-    const previous = sensorState[sensor.id] ?? meta.baseline;
-    const next = nextValue(previous, meta);
-    sensorState[sensor.id] = next;
-
-    const status = resolveStatus(sensor.metricId, next);
+    const seed = METRIC_SEEDS[sensor.metricId] + (index + 1) * 0.37;
+    const value = computeMetricValue(meta, now, seed, sensor.baselineOffset ?? 0);
+    const status = resolveStatus(sensor.metricId, value);
 
     return {
       id: sensor.id,
@@ -307,14 +268,14 @@ function buildSensorsSnapshot(): DashboardSensorsSnapshot {
       metricId: sensor.metricId,
       metricLabelKey: meta.labelKey,
       unitKey: meta.unitKey,
-      value: next,
+      value,
       status,
       statusKey: METRIC_STATUS_LABELS[status],
     };
   });
 
   return {
-    updatedAt: now.toISOString(),
+    updatedAt: new Date(now).toISOString(),
     sensors,
   };
 }

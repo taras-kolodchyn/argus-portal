@@ -57,14 +57,16 @@ export function AppHeader(): JSX.Element {
           </NavLink>
         ))}
       </nav>
-      <div className="flex flex-wrap items-start gap-4">
-        <ThemeToggle />
-        <LanguageToggle />
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="self-end">
+          <ThemeToggle />
+        </div>
+        <div className="self-end">
+          <LanguageToggle />
+        </div>
         {auth.isEnabled ? (
-          <div className="flex flex-col gap-1 text-left">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t("auth_session")}
-            </span>
+          <div className="flex flex-col gap-1 text-left self-end">
+            <span className="sr-only">{t("auth_session")}</span>
             {auth.isAuthenticated && auth.profile ? (
               <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
                 <UserCircle2 className="h-5 w-5 text-muted-foreground" />
@@ -117,7 +119,7 @@ export function AppHeader(): JSX.Element {
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 self-end rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
             <UserCircle2 className="h-5 w-5" />
             <span>{t("auth_not_configured")}</span>
           </div>

@@ -106,8 +106,8 @@ export function DashboardPage(): JSX.Element {
 
   const [insightsExpanded, setInsightsExpanded] = useState(false);
 
-  const metrics = metricsSnapshot?.metrics ?? [];
-  const sensors = sensorsSnapshot?.sensors ?? [];
+  const metrics = useMemo(() => metricsSnapshot?.metrics ?? [], [metricsSnapshot?.metrics]);
+  const sensors = useMemo(() => sensorsSnapshot?.sensors ?? [], [sensorsSnapshot?.sensors]);
 
   const lastMetricsUpdated = metricsSnapshot?.updatedAt
     ? formatDistanceToNow(new Date(metricsSnapshot.updatedAt), { addSuffix: true })
@@ -316,11 +316,11 @@ export function DashboardPage(): JSX.Element {
   );
 }
 
-type Insight = {
+interface Insight {
   metricId: MetricId;
   title: string;
   description: string;
-};
+}
 
 function buildInsights(metrics: DashboardMetric[], t: TFunction): Insight[] {
   const hasAlert = metrics.filter((metric) => metric.status === "alert");

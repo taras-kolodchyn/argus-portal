@@ -367,7 +367,7 @@ function alignDatasets(
   left: ComparePoint[],
   right: ComparePoint[],
   metric: MetricId,
-): Array<{ timestamp: string; label: string; left: number; right: number }> {
+): { timestamp: string; label: string; left: number; right: number }[] {
   return left.map((point, index) => {
     const rightPoint = right[index] ?? right[right.length - 1];
     return {

@@ -10,7 +10,7 @@ import marker from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
 import type { DashboardSensor } from "@/hooks/useDashboardData";
-import { useTheme } from "@/hooks/useTheme";
+import { useBasemapLayer } from "@/hooks/useBasemapLayer";
 import { cn } from "@/lib/utils";
 
 L.Icon.Default.mergeOptions({
@@ -35,22 +35,7 @@ interface CityMapProps {
 export function CityMap({ sensors, className }: CityMapProps): JSX.Element {
   const position = useMemo(() => kyivCoordinates, []);
   const { t } = useTranslation();
-  const { resolved } = useTheme();
-
-  const tileLayer = useMemo(() => {
-    if (resolved === "dark") {
-      return {
-        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      };
-    }
-    return {
-      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    };
-  }, [resolved]);
+  const basemap = useBasemapLayer();
 
   return (
     <MapContainer
@@ -59,11 +44,7 @@ export function CityMap({ sensors, className }: CityMapProps): JSX.Element {
       scrollWheelZoom
       className={cn("h-[320px] w-full overflow-hidden rounded-xl border border-border", className)}
     >
-      <TileLayer
-        key={resolved}
-        attribution={tileLayer.attribution}
-        url={tileLayer.url}
-      />
+      <TileLayer key={basemap.key} attribution={basemap.attribution} url={basemap.url} />
       {sensors.map((sensor) => {
         const color = statusToColor[sensor.status];
         return (
