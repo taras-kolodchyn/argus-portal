@@ -119,7 +119,7 @@
   "world_map_status_offline": "Офлайн",
   "world_map_status_maintenance": "Обслуговування",
   "metric_AQI": "Індекс якості повітря",
-  "metric_PM2.5": "PM2.5",
+  "metric_PM2_5": "PM2.5",
   "metric_Radiation": "Гамма-випромінювання",
   "metric_Water": "Якість води",
   "metric_Noise": "Рівень шуму"

@@ -119,7 +119,7 @@
   "world_map_status_offline": "Offline",
   "world_map_status_maintenance": "Maintenance",
   "metric_AQI": "Air Quality Index",
-  "metric_PM2.5": "PM2.5 particulate",
+  "metric_PM2_5": "PM2.5 particulate",
   "metric_Radiation": "Gamma radiation",
   "metric_Water": "Water quality",
   "metric_Noise": "Acoustic level"

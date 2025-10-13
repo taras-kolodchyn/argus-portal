@@ -1,21 +1,4 @@
-interface SensorReading {
-  metric: "AQI" | "PM2.5" | "Radiation" | "Water" | "Noise";
-  value: number;
-  unit: string;
-}
-
-interface SensorLocation {
-  id: string;
-  name: string;
-  status: "online" | "offline" | "maintenance";
-  city: string;
-  country: string;
-  latitude: number;
-  longitude: number;
-  updatedAt: string;
-  readings: SensorReading[];
-  primaryMetric: SensorReading;
-}
+import type { WorldMapSensor, WorldMapReading } from "@argus/world-map";
 
 interface BaseCity {
   city: string;
@@ -68,7 +51,7 @@ const baseCities: BaseCity[] = [
   { city: "Baku", country: "Azerbaijan", latitude: 40.4093, longitude: 49.8671 }
 ];
 
-const metrics: { metric: SensorReading["metric"]; unit: string; min: number; max: number }[] = [
+const metrics: { metric: WorldMapReading["metric"]; unit: string; min: number; max: number }[] = [
   { metric: "AQI", unit: "US AQI", min: 12, max: 140 },
   { metric: "PM2.5", unit: "µg/m³", min: 3, max: 120 },
   { metric: "Radiation", unit: "µSv/h", min: 0.05, max: 0.4 },
@@ -85,8 +68,8 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-const sensors: SensorLocation[] = (() => {
-  const list: SensorLocation[] = [];
+const sensors: WorldMapSensor[] = (() => {
+  const list: WorldMapSensor[] = [];
   const rand = seededRandom(20250212);
   const now = Date.now();
 
@@ -95,16 +78,19 @@ const sensors: SensorLocation[] = (() => {
     const offsetLat = (rand() - 0.5) * 0.6;
     const offsetLng = (rand() - 0.5) * 0.6;
     const statusRoll = rand();
-    const status: SensorLocation["status"] =
+    const status: WorldMapSensor["status"] =
       statusRoll > 0.9 ? "maintenance" : statusRoll > 0.8 ? "offline" : "online";
 
     const readingCount = 2 + Math.floor(rand() * 4);
     const availableMetrics = [...metrics];
-    const readings: SensorReading[] = [];
+    const readings: WorldMapReading[] = [];
 
     for (let j = 0; j < readingCount && availableMetrics.length > 0; j += 1) {
       const index = Math.floor(rand() * availableMetrics.length);
       const [metric] = availableMetrics.splice(index, 1);
+      if (!metric) {
+        continue;
+      }
       const value = metric.min + rand() * (metric.max - metric.min);
       const precision = metric.metric === "Radiation" ? 3 : metric.metric === "Water" ? 2 : 1;
       readings.push({
@@ -115,10 +101,13 @@ const sensors: SensorLocation[] = (() => {
     }
 
     const updatedAt = new Date(now - rand() * 1000 * 60 * 60 * 24).toISOString();
+    if (readings.length === 0) {
+      readings.push({ metric: "AQI", unit: "US AQI", value: Number((metrics[0].min + rand() * 10).toFixed(1)) });
+    }
 
     list.push({
       id: `sensor-${i + 1}`,
-      name: `Env Hub ${i + 1}`,
+      name: `${city.city} sensor ${i + 1}`,
       status,
       city: city.city,
       country: city.country,
@@ -133,5 +122,4 @@ const sensors: SensorLocation[] = (() => {
   return list;
 })();
 
-export type { SensorLocation, SensorReading };
 export { sensors as europeSensors };

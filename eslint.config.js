@@ -7,7 +7,7 @@ import queryPlugin from "@tanstack/eslint-plugin-query";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores(["dist"]),
+  globalIgnores(["dist", "packages/world-map/dist"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [
@@ -24,7 +24,7 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
       parserOptions: {
-        project: ["./tsconfig.app.json"],
+        project: ["./tsconfig.app.json", "./packages/world-map/tsconfig.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },
