@@ -1,217 +1,352 @@
-import { addMinutes, formatDistanceToNow } from "date-fns";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type QueryClient,
-} from "@tanstack/react-query";
+import { subMinutes } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
 
-type MetricId = "aqi" | "noise" | "radiation" | "water";
+export const DASHBOARD_METRIC_IDS = ["aqi", "noise", "radiation", "water"] as const;
 
-export interface Metric {
+export type MetricId = (typeof DASHBOARD_METRIC_IDS)[number];
+export type MetricStatus = "good" | "moderate" | "alert";
+
+export interface MetricTrendPoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface DashboardMetric {
   id: MetricId;
   labelKey: string;
+  unitKey: string;
   value: number;
   delta: number;
-  unitKey: string;
+  status: MetricStatus;
+  statusKey: string;
+  trend: MetricTrendPoint[];
+  decimals: number;
 }
 
-export interface AqiPoint {
-  timestamp: string;
-  value: number;
+export interface DashboardMetricsSnapshot {
+  updatedAt: string;
+  metrics: DashboardMetric[];
 }
 
-export type DeviceStatus = "online" | "offline" | "maintenance";
-
-export interface Device {
+export interface DashboardSensor {
   id: string;
   name: string;
-  location: string;
-  status: DeviceStatus;
-  lastSeen: string;
-  serial: string;
+  coordinates: [number, number];
+  metricId: MetricId;
+  metricLabelKey: string;
+  unitKey: string;
+  value: number;
+  status: MetricStatus;
+  statusKey: string;
 }
 
-export interface NotificationItem {
-  id: string;
-  title: string;
-  description: string;
-  severity: "critical" | "warning" | "info";
-  timestamp: string;
+export interface DashboardSensorsSnapshot {
+  updatedAt: string;
+  sensors: DashboardSensor[];
 }
 
-interface AddDevicePayload {
-  serial: string;
-  secret: string;
+export const METRIC_STATUS_LABELS: Record<MetricStatus, string> = {
+  good: "metric_status_good",
+  moderate: "metric_status_moderate",
+  alert: "metric_status_alert",
+};
+
+interface MetricMeta {
+  labelKey: string;
+  unitKey: string;
+  decimals: number;
+  baseline: number;
+  bounds: [number, number];
+  volatility: number;
 }
 
-const metricsData: Metric[] = [
-  {
-    id: "aqi",
+const METRICS_META: Record<MetricId, MetricMeta> = {
+  aqi: {
     labelKey: "metric_aqi",
-    value: 42,
-    delta: -4,
     unitKey: "metric_units_aqi",
+    decimals: 0,
+    baseline: 42,
+    bounds: [8, 160],
+    volatility: 8,
   },
-  {
-    id: "noise",
+  noise: {
     labelKey: "metric_noise",
-    value: 58,
-    delta: 2,
     unitKey: "metric_units_noise",
+    decimals: 0,
+    baseline: 55,
+    bounds: [30, 90],
+    volatility: 4,
   },
-  {
-    id: "radiation",
+  radiation: {
     labelKey: "metric_radiation",
-    value: 0.12,
-    delta: 0.01,
     unitKey: "metric_units_radiation",
+    decimals: 2,
+    baseline: 0.12,
+    bounds: [0.05, 0.6],
+    volatility: 0.02,
   },
-  {
-    id: "water",
+  water: {
     labelKey: "metric_water",
-    value: 7.2,
-    delta: -0.1,
     unitKey: "metric_units_water",
+    decimals: 2,
+    baseline: 7.2,
+    bounds: [5.5, 8.8],
+    volatility: 0.1,
+  },
+};
+
+const TREND_LENGTH = 24;
+const TREND_STEP_MINUTES = 30;
+
+interface MetricState {
+  trend: MetricTrendPoint[];
+}
+
+const metricState: Record<MetricId, MetricState> = initializeMetricState();
+
+interface SensorMeta {
+  id: string;
+  name: string;
+  coordinates: [number, number];
+  metricId: MetricId;
+  baselineOffset?: number;
+}
+
+const SENSOR_META: SensorMeta[] = [
+  {
+    id: "kyiv-center",
+    name: "Kyiv City Hall",
+    coordinates: [50.4501, 30.5234],
+    metricId: "aqi",
+  },
+  {
+    id: "podil",
+    name: "Podil Riverside",
+    coordinates: [50.471, 30.5061],
+    metricId: "water",
+    baselineOffset: -0.2,
+  },
+  {
+    id: "obolon",
+    name: "Obolon Eco Park",
+    coordinates: [50.523, 30.4986],
+    metricId: "noise",
+    baselineOffset: 6,
+  },
+  {
+    id: "troieshchyna",
+    name: "Troieshchyna Station",
+    coordinates: [50.5132, 30.6047],
+    metricId: "radiation",
+    baselineOffset: 0.03,
+  },
+  {
+    id: "zoloti-vorota",
+    name: "Zoloti Vorota",
+    coordinates: [50.4478, 30.5133],
+    metricId: "aqi",
+  },
+  {
+    id: "sviatoshyn",
+    name: "Sviatoshyn Park",
+    coordinates: [50.4576, 30.3553],
+    metricId: "noise",
+    baselineOffset: -5,
+  },
+  {
+    id: "pechersk",
+    name: "Pechersk Hills",
+    coordinates: [50.4268, 30.5615],
+    metricId: "radiation",
+    baselineOffset: -0.02,
   },
 ];
 
-const aqiSeries: AqiPoint[] = Array.from({ length: 12 }, (_, index) => {
-  const base = new Date();
-  const pointTime = addMinutes(base, index * -30);
+const sensorState: Record<string, number> = initializeSensorState();
+
+function initializeMetricState(): Record<MetricId, MetricState> {
+  const now = new Date();
+
+  return DASHBOARD_METRIC_IDS.reduce((acc, id) => {
+    const meta = METRICS_META[id];
+    let value = meta.baseline;
+    const trend: MetricTrendPoint[] = Array.from({ length: TREND_LENGTH }, (_, index) => {
+      const timestamp = subMinutes(
+        now,
+        (TREND_LENGTH - index) * TREND_STEP_MINUTES,
+      );
+
+      if (index !== 0) {
+        value = nextValue(value, meta);
+      }
+
+      return {
+        timestamp: timestamp.toISOString(),
+        value: round(value, meta.decimals),
+      };
+    });
+
+    acc[id] = { trend };
+    return acc;
+  }, {} as Record<MetricId, MetricState>);
+}
+
+function initializeSensorState(): Record<string, number> {
+  return SENSOR_META.reduce((acc, sensor) => {
+    const meta = METRICS_META[sensor.metricId];
+    const baseline =
+      meta.baseline + (sensor.baselineOffset ?? (Math.random() - 0.5) * meta.volatility);
+    acc[sensor.id] = round(
+      clamp(baseline, meta.bounds[0], meta.bounds[1]),
+      meta.decimals,
+    );
+    return acc;
+  }, {} as Record<string, number>);
+}
+
+function round(value: number, decimals: number): number {
+  const factor = Math.pow(10, decimals);
+  return Math.round(value * factor) / factor;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function randomDrift(range: number): number {
+  return (Math.random() - 0.5) * range * 2;
+}
+
+function nextValue(previous: number, meta: MetricMeta): number {
+  const next = previous + randomDrift(meta.volatility);
+  const [min, max] = meta.bounds;
+  return round(clamp(next, min, max), meta.decimals);
+}
+
+function resolveStatus(id: MetricId, value: number): MetricStatus {
+  switch (id) {
+    case "aqi":
+      if (value <= 50) return "good";
+      if (value <= 100) return "moderate";
+      return "alert";
+    case "noise":
+      if (value <= 55) return "good";
+      if (value <= 70) return "moderate";
+      return "alert";
+    case "radiation":
+      if (value <= 0.15) return "good";
+      if (value <= 0.3) return "moderate";
+      return "alert";
+    case "water": {
+      const delta = Math.abs(7 - value);
+      if (delta <= 0.4) return "good";
+      if (delta <= 1) return "moderate";
+      return "alert";
+    }
+    default:
+      return "moderate";
+  }
+}
+
+function buildMetricsSnapshot(): DashboardMetricsSnapshot {
+  const now = new Date();
+
+  const metrics = DASHBOARD_METRIC_IDS.map((id) => {
+    const meta = METRICS_META[id];
+    const state = metricState[id];
+    const previousTrend = state.trend;
+    const previousValue = previousTrend[previousTrend.length - 1]?.value ?? meta.baseline;
+
+    const nextMetricValue = nextValue(previousValue, meta);
+    const nextPoint: MetricTrendPoint = {
+      timestamp: now.toISOString(),
+      value: nextMetricValue,
+    };
+
+    const trend = [...previousTrend.slice(1), nextPoint];
+    metricState[id] = { trend };
+
+    const comparisonPoint = trend[trend.length - 2] ?? previousTrend[previousTrend.length - 1];
+    const delta = round(nextMetricValue - (comparisonPoint?.value ?? nextMetricValue), meta.decimals);
+    const status = resolveStatus(id, nextMetricValue);
+
+    return {
+      id,
+      labelKey: meta.labelKey,
+      unitKey: meta.unitKey,
+      value: nextMetricValue,
+      delta,
+      status,
+      statusKey: METRIC_STATUS_LABELS[status],
+      trend,
+      decimals: meta.decimals,
+    };
+  });
+
   return {
-    timestamp: pointTime.toISOString(),
-    value: 35 + Math.round(Math.random() * 15),
+    updatedAt: now.toISOString(),
+    metrics,
   };
-}).reverse();
+}
 
-let devicesStore: Device[] = [
-  {
-    id: "dev-1",
-    name: "AQI-001",
-    location: "Kyiv, Downtown",
-    status: "online",
-    lastSeen: formatDistanceToNow(addMinutes(new Date(), -5), {
-      addSuffix: true,
-    }),
-    serial: "AQI-001",
-  },
-  {
-    id: "dev-2",
-    name: "NOISE-113",
-    location: "Obolon",
-    status: "maintenance",
-    lastSeen: formatDistanceToNow(addMinutes(new Date(), -120), {
-      addSuffix: true,
-    }),
-    serial: "NOI-113",
-  },
-  {
-    id: "dev-3",
-    name: "RAD-778",
-    location: "Troieshchyna",
-    status: "offline",
-    lastSeen: formatDistanceToNow(addMinutes(new Date(), -240), {
-      addSuffix: true,
-    }),
-    serial: "RAD-778",
-  },
-];
+function buildSensorsSnapshot(): DashboardSensorsSnapshot {
+  const now = new Date();
 
-const notificationsData: NotificationItem[] = [
-  {
-    id: "notif-1",
-    title: "Noise threshold exceeded",
-    description: "Device NOISE-113 recorded 85 dB for 15 minutes",
-    severity: "warning",
-    timestamp: addMinutes(new Date(), -90).toISOString(),
-  },
-  {
-    id: "notif-2",
-    title: "Radiation spike detected",
-    description: "RAD-778 observed 0.25 µSv/h at 04:20",
-    severity: "critical",
-    timestamp: addMinutes(new Date(), -240).toISOString(),
-  },
-  {
-    id: "notif-3",
-    title: "New device paired",
-    description: "AQI-001 paired successfully",
-    severity: "info",
-    timestamp: addMinutes(new Date(), -720).toISOString(),
-  },
-];
+  const sensors = SENSOR_META.map((sensor) => {
+    const meta = METRICS_META[sensor.metricId];
+    const previous = sensorState[sensor.id] ?? meta.baseline;
+    const next = nextValue(previous, meta);
+    sensorState[sensor.id] = next;
+
+    const status = resolveStatus(sensor.metricId, next);
+
+    return {
+      id: sensor.id,
+      name: sensor.name,
+      coordinates: sensor.coordinates,
+      metricId: sensor.metricId,
+      metricLabelKey: meta.labelKey,
+      unitKey: meta.unitKey,
+      value: next,
+      status,
+      statusKey: METRIC_STATUS_LABELS[status],
+    };
+  });
+
+  return {
+    updatedAt: now.toISOString(),
+    sensors,
+  };
+}
 
 function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 export function useDashboardMetrics() {
   return useQuery({
     queryKey: ["dashboard", "metrics"],
     queryFn: async () => {
-      await wait(150);
-      return metricsData;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-export function useAqiSeries() {
-  return useQuery({
-    queryKey: ["dashboard", "aqi"],
-    queryFn: async () => {
-      await wait(120);
-      return aqiSeries;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-export function useDevices() {
-  return useQuery({
-    queryKey: ["devices"],
-    queryFn: async () => {
       await wait(180);
-      return devicesStore;
+      return buildMetricsSnapshot();
     },
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   });
 }
 
-export function useNotifications() {
+export function useDashboardSensors() {
   return useQuery({
-    queryKey: ["notifications"],
+    queryKey: ["dashboard", "sensors"],
     queryFn: async () => {
-      await wait(100);
-      return notificationsData;
+      await wait(220);
+      return buildSensorsSnapshot();
     },
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   });
 }
-
-export function useAddDevice() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ serial }: AddDevicePayload) => {
-      await wait(200);
-      const newDevice: Device = {
-        id: `dev-${Date.now()}`,
-        name: serial.toUpperCase(),
-        location: "Kyiv",
-        status: "offline",
-        lastSeen: formatDistanceToNow(new Date(), { addSuffix: true }),
-        serial,
-      };
-      devicesStore = [newDevice, ...devicesStore];
-      return newDevice;
-    },
-    onSuccess: () => refreshDevices(queryClient),
-  });
-}
-
-function refreshDevices(queryClient: QueryClient) {
-  queryClient.invalidateQueries({ queryKey: ["devices"] }).catch(() => {
-    // no-op for stale query
-  });
-}
-

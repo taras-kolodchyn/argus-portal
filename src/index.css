@@ -5,67 +5,115 @@
 :root {
   --font-sans: "Inter", "system-ui", "-apple-system", "Segoe UI", sans-serif;
   --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  --foreground: 220 18% 16%;
 
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
+  --card-foreground: 220 18% 16%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
+  --popover-foreground: 220 18% 16%;
 
-  --primary: 222 47% 11%;
-  --primary-foreground: 210 40% 98%;
+  --primary: 206 100% 42%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 190 72% 94%;
+  --secondary-foreground: 206 90% 26%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215 16% 46.9%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 213 20% 46%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222 47% 11%;
+  --accent: 156 100% 33%;
+  --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
 
-  --border: 214 31% 91%;
-  --input: 214 31% 91%;
-  --ring: 222 47% 11%;
+  --border: 210 36% 89%;
+  --input: 210 36% 89%;
+  --ring: 206 100% 42%;
 
   --radius: 0.75rem;
 }
 
 .dark {
-  --background: 240 10% 3.9%;
-  --foreground: 0 0% 98%;
+  --background: 220 18% 10%;
+  --foreground: 0 0% 96%;
 
-  --card: 240 10% 3.9%;
-  --card-foreground: 0 0% 98%;
+  --card: 222 18% 12%;
+  --card-foreground: 0 0% 96%;
 
-  --popover: 240 10% 3.9%;
-  --popover-foreground: 0 0% 98%;
+  --popover: 222 18% 12%;
+  --popover-foreground: 0 0% 96%;
 
-  --primary: 210 40% 98%;
+  --primary: 194 100% 62%;
   --primary-foreground: 222 47% 11%;
 
-  --secondary: 222 47% 11%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 206 42% 18%;
+  --secondary-foreground: 0 0% 96%;
 
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 214 28% 20%;
+  --muted-foreground: 213 19% 72%;
 
-  --accent: 217 33% 17%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 156 78% 36%;
+  --accent-foreground: 0 0% 96%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 62% 44%;
+  --destructive-foreground: 0 0% 96%;
 
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 210 40% 98%;
+  --border: 214 32% 24%;
+  --input: 214 32% 24%;
+  --ring: 194 100% 58%;
 }
 
 body {
   font-feature-settings: "rlig" 1, "calt" 1;
   @apply bg-background text-foreground antialiased;
+}
+
+.leaflet-tooltip {
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  box-shadow: 0 12px 20px rgba(15, 23, 42, 0.18);
+  background-color: rgba(248, 250, 252, 0.96);
+  color: #0f172a;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.leaflet-tooltip .text-muted-foreground {
+  color: rgba(51, 65, 85, 0.72);
+}
+
+.leaflet-tooltip-top::before,
+.leaflet-tooltip-bottom::before,
+.leaflet-tooltip-left::before,
+.leaflet-tooltip-right::before {
+  border-top-color: rgba(248, 250, 252, 0.96);
+  border-bottom-color: rgba(248, 250, 252, 0.96);
+  border-left-color: rgba(248, 250, 252, 0.96);
+  border-right-color: rgba(248, 250, 252, 0.96);
+}
+
+.dark .leaflet-tooltip {
+  background-color: rgba(15, 23, 42, 0.9);
+  color: #F8FAFC;
+  border-color: rgba(148, 163, 184, 0.3);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.45);
+}
+
+.dark .leaflet-tooltip .text-muted-foreground {
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.dark .leaflet-tooltip-top::before,
+.dark .leaflet-tooltip-bottom::before,
+.dark .leaflet-tooltip-left::before,
+.dark .leaflet-tooltip-right::before {
+  border-top-color: rgba(15, 23, 42, 0.9);
+  border-bottom-color: rgba(15, 23, 42, 0.9);
+  border-left-color: rgba(15, 23, 42, 0.9);
+  border-right-color: rgba(15, 23, 42, 0.9);
 }

@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
 
+import { AppLogo } from "@/components/layout/app-logo";
 import { NAV_ITEMS, type NavItem } from "@/components/layout/navigation";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +12,7 @@ export function AppSidebar(): JSX.Element {
   return (
     <aside className="hidden h-screen w-64 flex-col border-r border-border bg-card px-4 py-6 lg:flex">
       <div className="mb-8 px-2">
-        <span className="text-lg font-semibold">{t("app_name")}</span>
+        <AppLogo withText label={t("app_name")} />
       </div>
       <nav className="flex flex-1 flex-col gap-1">
         {NAV_ITEMS.map((item) => (

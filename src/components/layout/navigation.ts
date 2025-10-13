@@ -1,8 +1,9 @@
 import {
-  Globe2,
   BellRing,
+  FileBarChart2,
+  GitCompare,
   LayoutDashboard,
-  ServerCog,
+  MapPinned,
   UserCircle2,
   type LucideIcon,
 } from "lucide-react";
@@ -20,19 +21,24 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/",
   },
   {
-    icon: ServerCog,
-    labelKey: "devices",
-    to: "/devices",
+    icon: FileBarChart2,
+    labelKey: "forecast",
+    to: "/forecast",
   },
   {
-    icon: Globe2,
-    labelKey: "world_map",
-    to: "/world-map",
+    icon: GitCompare,
+    labelKey: "compare",
+    to: "/compare",
   },
   {
     icon: BellRing,
     labelKey: "notifications",
     to: "/notifications",
+  },
+  {
+    icon: MapPinned,
+    labelKey: "reports",
+    to: "/reports",
   },
   {
     icon: UserCircle2,

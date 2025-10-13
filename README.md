@@ -1,6 +1,36 @@
 # Argus Portal MVP
 
+
 Argus Portal is a React + Vite web application that visualises environmental sensor data for a global audience. The MVP includes a Leaflet map, KPI cards, realtime charts, device management UI, notifications list, and profile preferences with light/dark theme and EN/UA localisation.
+
+---
+
+### UI Screenshots
+
+#### 🌙 Dark Theme
+![Argus Portal – Dark Theme](docs/screenshots/dashboard-dark.jpg)
+
+#### ☀️ Light Theme
+![Argus Portal – Light Theme](docs/screenshots/dashboard-light.jpg)
+
+---
+
+### 🗺️ Basemap Providers
+
+Argus Portal relies exclusively on **open and license-free map tiles**.  
+No proprietary or paid map services (e.g., Stadia Maps, Mapbox, Google) are used.
+
+| Mode | Provider | Tile URL | License |
+|------|-----------|-----------|----------|
+| **Light** | [OpenStreetMap](https://www.openstreetmap.org/copyright) | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` | ODbL 1.0 |
+| **Dark** | [CARTO Basemaps](https://carto.com/help/building-maps/basemap-list/) | `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png` | Free for public/open use |
+
+Both providers allow free, key-less access when attribution is displayed:  
+`© OpenStreetMap contributors © CARTO`.
+
+> This ensures Argus Portal remains 100 % open-data compliant and independent of any commercial tile API keys.
+
+---
 
 ## Tech Stack
 
