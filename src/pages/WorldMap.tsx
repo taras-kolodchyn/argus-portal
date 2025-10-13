@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 
@@ -11,23 +11,6 @@ interface StatusSummary {
   online: number;
   offline: number;
   maintenance: number;
-}
-
-function buildSummary(sensors: WorldMapSensor[]): StatusSummary {
-  return sensors.reduce<StatusSummary>(
-    (acc, sensor) => {
-      acc.total += 1;
-      if (sensor.status === "online") {
-        acc.online += 1;
-      } else if (sensor.status === "offline") {
-        acc.offline += 1;
-      } else {
-        acc.maintenance += 1;
-      }
-      return acc;
-    },
-    { total: 0, online: 0, offline: 0, maintenance: 0 },
-  );
 }
 
 export function WorldMapPage(): JSX.Element {
@@ -100,16 +83,29 @@ export function WorldMapPage(): JSX.Element {
     [sensorsQuery.data],
   );
 
-  const summary = useMemo(() => {
-    if (summaryQuery.data) return summaryQuery.data;
-    return buildSummary(sensors);
-  }, [summaryQuery.data, sensors]);
+  const [summary, setSummary] = useState<StatusSummary | null>(null);
+  useEffect(() => {
+    if (summaryQuery.data) {
+      setSummary(summaryQuery.data);
+    }
+  }, [summaryQuery.data]);
 
   const sensorsLoading = sensorsQuery.isLoading;
   const sensorsError = sensorsQuery.isError;
+  const summaryLoading = summaryQuery.isLoading;
+  const summaryError = summaryQuery.isError;
+  const formatSummaryValue = useCallback(
+    (value: number | undefined) => {
+      if (value === undefined) {
+        return summaryLoading ? "..." : "N/A";
+      }
+      return value.toLocaleString(i18n.language);
+    },
+    [i18n.language, summaryLoading],
+  );
   const formattedVisibleCount = sensors.length.toLocaleString(i18n.language);
 
-  const statusColor = (status: WorldMapSensor["status"]): string => {
+  const statusColor = useCallback((status: WorldMapSensor["status"]): string => {
     switch (status) {
       case "online":
         return "text-emerald-500";
@@ -119,32 +115,35 @@ export function WorldMapPage(): JSX.Element {
       default:
         return "text-destructive";
     }
-  };
+  }, []);
 
-  const sanitizeMetric = (metric: string) => metric.replace(/[^a-zA-Z0-9]/g, "_");
+  const sanitizeMetric = useCallback((metric: string) => metric.replace(/[^a-zA-Z0-9]/g, "_"), []);
 
-  const renderTooltip = (sensor: WorldMapSensor) => (
-    <div className="space-y-1 text-xs">
-      <p className="font-semibold">
-        {sensor.city}, {sensor.country}
-      </p>
-      <p className={`font-medium ${statusColor(sensor.status)}`}>
-        {t(`world_map_status_${sensor.status}`)}
-      </p>
-      <ul className="space-y-1">
-        {sensor.readings.map((reading) => (
-          <li key={`${sensor.id}-${reading.metric}`}>
-            {t(`metric_${sanitizeMetric(reading.metric)}`, {
-              defaultValue: reading.metric,
-            })}
-            : {reading.value} {reading.unit}
-          </li>
-        ))}
-      </ul>
-      <p className="text-muted-foreground">
-        {t("world_map_updated")}: {new Date(sensor.updatedAt).toLocaleString(i18n.language)}
-      </p>
-    </div>
+  const renderTooltip = useCallback(
+    (sensor: WorldMapSensor) => (
+      <div className="space-y-1 text-xs">
+        <p className="font-semibold">
+          {sensor.city}, {sensor.country}
+        </p>
+        <p className={`font-medium ${statusColor(sensor.status)}`}>
+          {t(`world_map_status_${sensor.status}`)}
+        </p>
+        <ul className="space-y-1">
+          {sensor.readings.map((reading) => (
+            <li key={`${sensor.id}-${reading.metric}`}>
+              {t(`metric_${sanitizeMetric(reading.metric)}`, {
+                defaultValue: reading.metric,
+              })}
+              : {reading.value} {reading.unit}
+            </li>
+          ))}
+        </ul>
+        <p className="text-muted-foreground">
+          {t("world_map_updated")}: {new Date(sensor.updatedAt).toLocaleString(i18n.language)}
+        </p>
+      </div>
+    ),
+    [i18n.language, sanitizeMetric, statusColor, t],
   );
 
   return (
@@ -158,7 +157,7 @@ export function WorldMapPage(): JSX.Element {
             <CardDescription>{t("world_map_active_network")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold">{summary.total.toLocaleString()}</p>
+            <p className="text-3xl font-semibold">{formatSummaryValue(summary?.total)}</p>
           </CardContent>
         </Card>
         <Card className="border-emerald-500/40 bg-emerald-500/10">
@@ -169,7 +168,7 @@ export function WorldMapPage(): JSX.Element {
             <CardDescription>{t("world_map_online_hint")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold text-emerald-500">{summary.online.toLocaleString()}</p>
+            <p className="text-3xl font-semibold text-emerald-500">{formatSummaryValue(summary?.online)}</p>
           </CardContent>
         </Card>
         <Card className="border-amber-500/40 bg-amber-500/10">
@@ -180,7 +179,7 @@ export function WorldMapPage(): JSX.Element {
             <CardDescription>{t("world_map_maintenance_hint")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold text-amber-500">{summary.maintenance.toLocaleString()}</p>
+            <p className="text-3xl font-semibold text-amber-500">{formatSummaryValue(summary?.maintenance)}</p>
           </CardContent>
         </Card>
         <Card className="border-destructive/40 bg-destructive/10">
@@ -191,10 +190,15 @@ export function WorldMapPage(): JSX.Element {
             <CardDescription>{t("world_map_offline_hint")}</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-semibold text-destructive">{summary.offline.toLocaleString()}</p>
+            <p className="text-3xl font-semibold text-destructive">{formatSummaryValue(summary?.offline)}</p>
           </CardContent>
         </Card>
       </div>
+      {summaryError ? (
+        <p className="text-xs text-destructive">
+          {t("world_map_summary_error", { defaultValue: "Summary data unavailable right now." })}
+        </p>
+      ) : null}
 
       <Card className="border border-border/60 bg-card/80">
         <CardHeader>

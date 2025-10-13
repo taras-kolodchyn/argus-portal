@@ -101,13 +101,13 @@ export function generateDataset(count: number, seed = 20250212): DeviceDataset {
   console.log(`[generator] Building ${count.toLocaleString()} synthetic devices...`);
   const rand = seededRandom(seed);
   const features: DeviceFeature[] = [];
-  const metricStats: Summary["metrics"] = {
-    AQI: { average: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
-    "PM2.5": { average: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
-    Radiation: { average: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
-    Water: { average: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
-    Noise: { average: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
-  };
+  const metricStats = {
+    AQI: { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
+    "PM2.5": { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
+    Radiation: { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
+    Water: { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
+    Noise: { sum: 0, count: 0, min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
+  } satisfies Record<MetricType, { sum: number; count: number; min: number; max: number }>;
 
   let online = 0;
   let offline = 0;
@@ -138,7 +138,8 @@ export function generateDataset(count: number, seed = 20250212): DeviceDataset {
       readings.push({ metric: metric.metric, unit: metric.unit, value: readingValue });
 
       const stats = metricStats[metric.metric];
-      stats.average += readingValue;
+      stats.sum += readingValue;
+      stats.count += 1;
       stats.min = Math.min(stats.min, readingValue);
       stats.max = Math.max(stats.max, readingValue);
     }
@@ -171,12 +172,17 @@ export function generateDataset(count: number, seed = 20250212): DeviceDataset {
   }
 
   const totals = features.length;
-  (Object.keys(metricStats) as MetricType[]).forEach((metric) => {
-    const stats = metricStats[metric];
-    stats.average = Number((stats.average / totals).toFixed(2));
-    if (!Number.isFinite(stats.min)) stats.min = 0;
-    if (!Number.isFinite(stats.max)) stats.max = 0;
-  });
+
+  const summaryMetrics: Summary["metrics"] = Object.fromEntries(
+    (Object.keys(metricStats) as MetricType[]).map((metric) => {
+      const stats = metricStats[metric];
+      const average =
+        stats.count === 0 ? 0 : Number((stats.sum / stats.count).toFixed(2));
+      const min = Number.isFinite(stats.min) ? stats.min : 0;
+      const max = Number.isFinite(stats.max) ? stats.max : 0;
+      return [metric, { average, min, max }];
+    }),
+  ) as Summary["metrics"];
 
   const index = new KDBush<DeviceFeature>(
     features,
@@ -192,7 +198,7 @@ export function generateDataset(count: number, seed = 20250212): DeviceDataset {
       online,
       offline,
       maintenance,
-      metrics: metricStats,
+      metrics: summaryMetrics,
     },
   };
 
