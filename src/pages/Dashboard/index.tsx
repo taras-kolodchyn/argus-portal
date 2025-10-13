@@ -11,13 +11,12 @@ import {
   Minus,
   Radiation,
   Volume2,
-  Waves,
   Wind,
   type LucideIcon,
 } from "lucide-react";
 
-import mapLegendJson from "@/data/dashboard-map-legend.json" assert { type: "json" };
 import { MetricSparkline } from "@/components/charts/metric-sparkline";
+import { EnvironmentTrendChart } from "@/components/charts/environment-trend-chart";
 import { CityMap } from "@/components/maps/city-map";
 import {
   Card,
@@ -30,7 +29,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  DASHBOARD_METRIC_IDS,
   type DashboardMetric,
+  type DashboardSensor,
   type MetricId,
   type MetricStatus,
   useDashboardMetrics,
@@ -38,28 +39,10 @@ import {
 } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
 
-interface MapLegendEntry {
-  id: string;
-  labelKey: string;
-  rangeKey: string;
-  color: string;
-  count: number;
-}
-
-const mapLegendItems = mapLegendJson as MapLegendEntry[];
-
 const metricIcons: Record<MetricId, LucideIcon> = {
   aqi: Wind,
   noise: Volume2,
   radiation: Radiation,
-  water: Waves,
-};
-
-const metricColors: Record<MetricId, string> = {
-  aqi: "var(--primary)",
-  noise: "hsl(38 92% 56%)",
-  radiation: "hsl(12 86% 58%)",
-  water: "var(--accent)",
 };
 
 const statusChipStyles: Record<MetricStatus, string> = {
@@ -67,6 +50,43 @@ const statusChipStyles: Record<MetricStatus, string> = {
   moderate: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200",
   alert: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
 };
+
+interface LegendItem {
+  status: MetricStatus;
+  count: number;
+  labelKey: string;
+  color: string;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "");
+  const bigint = parseInt(normalized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getMetricColor(metric: DashboardMetric): string {
+  switch (metric.id) {
+    case "aqi":
+      if (metric.value <= 50) return "#22c55e";
+      if (metric.value <= 100) return "#facc15";
+      if (metric.value <= 150) return "#f97316";
+      return "#ef4444";
+    case "noise":
+      if (metric.value <= 45) return "#60a5fa";
+      if (metric.value <= 60) return "#6366f1";
+      if (metric.value <= 75) return "#7c3aed";
+      return "#a21caf";
+    case "radiation":
+      if (metric.value <= 0.15) return "#22c55e";
+      if (metric.value <= 0.3) return "#f97316";
+      return "#ef4444";
+    default:
+      return "#6366f1";
+  }
+}
 
 function MetricDelta({ value, decimals }: { value: number; decimals: number }): JSX.Element {
   if (value === 0) {
@@ -106,8 +126,14 @@ export function DashboardPage(): JSX.Element {
 
   const [insightsExpanded, setInsightsExpanded] = useState(false);
 
-  const metrics = useMemo(() => metricsSnapshot?.metrics ?? [], [metricsSnapshot?.metrics]);
-  const sensors = useMemo(() => sensorsSnapshot?.sensors ?? [], [sensorsSnapshot?.sensors]);
+  const metrics = useMemo<DashboardMetric[]>(
+    () => metricsSnapshot?.metrics ?? [],
+    [metricsSnapshot?.metrics],
+  );
+  const sensors = useMemo<DashboardSensor[]>(
+    () => sensorsSnapshot?.sensors ?? [],
+    [sensorsSnapshot?.sensors],
+  );
 
   const lastMetricsUpdated = metricsSnapshot?.updatedAt
     ? formatDistanceToNow(new Date(metricsSnapshot.updatedAt), { addSuffix: true })
@@ -117,7 +143,6 @@ export function DashboardPage(): JSX.Element {
     ? formatDistanceToNow(new Date(sensorsSnapshot.updatedAt), { addSuffix: true })
     : null;
 
-  const aqiMetric = metrics.find((metric) => metric.id === "aqi");
   const insights = useMemo(() => buildInsights(metrics, t), [metrics, t]);
   const DEFAULT_VISIBLE_INSIGHTS = 3;
   const visibleInsights = insightsExpanded || insights.length <= DEFAULT_VISIBLE_INSIGHTS
@@ -125,11 +150,45 @@ export function DashboardPage(): JSX.Element {
     : insights.slice(0, DEFAULT_VISIBLE_INSIGHTS);
   const canToggleInsights = insights.length > DEFAULT_VISIBLE_INSIGHTS;
 
+  const goodCount = sensors.filter((sensor) => sensor.status === "good").length;
+  const moderateCount = sensors.filter((sensor) => sensor.status === "moderate").length;
+  const alertCount = sensors.filter((sensor) => sensor.status === "alert").length;
+
+  const legendItems: LegendItem[] = [
+    {
+      status: "good" as MetricStatus,
+      count: goodCount,
+      labelKey: "metric_status_good",
+      color: "#00A86B",
+    },
+    {
+      status: "moderate" as MetricStatus,
+      count: moderateCount,
+      labelKey: "metric_status_moderate",
+      color: "#F59E0B",
+    },
+    {
+      status: "alert" as MetricStatus,
+      count: alertCount,
+      labelKey: "metric_status_alert",
+      color: "#EF4444",
+    },
+  ].filter((item) => item.count > 0);
+
+  const lineLabels = useMemo(
+    () => ({
+      aqi: t("metric_aqi"),
+      noise: t("metric_noise"),
+      radiation: t("metric_radiation"),
+    }),
+    [t],
+  );
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {metricsLoading
-          ? Array.from({ length: 4 }).map((_, index) => (
+          ? Array.from({ length: DASHBOARD_METRIC_IDS.length }).map((_, index) => (
               <Card key={`metric-skeleton-${index}`} className="border-dashed">
                 <CardHeader className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -145,14 +204,21 @@ export function DashboardPage(): JSX.Element {
             ))
           : metrics.map((metric) => {
               const Icon = metricIcons[metric.id];
-              const color = metricColors[metric.id];
+              const accent = getMetricColor(metric);
+              const iconStyle = {
+                color: accent,
+                backgroundColor: hexToRgba(accent, 0.15),
+              };
               return (
                 <Card key={metric.id} className="overflow-hidden">
                   <CardHeader className="space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary dark:bg-primary/15">
+                          <span
+                            className="flex h-9 w-9 items-center justify-center rounded-xl"
+                            style={iconStyle}
+                          >
                             <Icon className="h-4 w-4" />
                           </span>
                           {t(metric.labelKey)}
@@ -167,13 +233,13 @@ export function DashboardPage(): JSX.Element {
                       <span className="text-3xl font-semibold tracking-tight">{metric.value}</span>
                   <MetricDelta value={metric.delta} decimals={metric.decimals} />
                 </div>
-              </CardHeader>
-              <CardContent className="mt-2 px-0 pb-4">
-                <MetricSparkline data={metric.trend} color={color} />
-              </CardContent>
-            </Card>
-          );
-        })}
+                  </CardHeader>
+                  <CardContent className="mt-2 px-0 pb-4">
+                    <MetricSparkline data={metric.trend} color={accent} />
+                  </CardContent>
+                </Card>
+              );
+            })}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.75fr,1fr]">
@@ -205,21 +271,22 @@ export function DashboardPage(): JSX.Element {
               {t("dashboard_map_legend_heading")}
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              {mapLegendItems.map((item) => (
-                <div key={item.id} className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                    aria-hidden
-                  />
-                  <div className="flex flex-col leading-tight">
-                    <span className="font-semibold text-foreground">
-                      {item.count}× {t(item.labelKey)}
-                    </span>
-                    <span className="text-xs">{t(item.rangeKey)}</span>
+              {legendItems.map(({ status, count, labelKey, color }) => {
+                return (
+                  <div key={status} className="flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: color }}
+                      aria-hidden
+                    />
+                    <div className="flex flex-col leading-tight">
+                      <span className="font-semibold text-foreground">
+                        {count}× {t(labelKey)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardFooter>
         </Card>
@@ -262,8 +329,8 @@ export function DashboardPage(): JSX.Element {
         <Card>
           <CardHeader className="flex items-center justify-between">
             <div>
-              <CardTitle>{t("dashboard_aqi_trend_title")}</CardTitle>
-              <CardDescription>{t("dashboard_aqi_trend_description")}</CardDescription>
+              <CardTitle>{t("dashboard_environment_trend_title")}</CardTitle>
+              <CardDescription>{t("dashboard_environment_trend_description")}</CardDescription>
             </div>
             {lastMetricsUpdated && (
               <Badge variant="outline" className="rounded-full text-xs font-medium">
@@ -272,8 +339,8 @@ export function DashboardPage(): JSX.Element {
             )}
           </CardHeader>
           <CardContent className="pt-6">
-            {aqiMetric ? (
-              <MetricSparkline data={aqiMetric.trend} color={metricColors.aqi} height={240} />
+            {metrics.length > 0 ? (
+              <EnvironmentTrendChart metrics={metrics} labels={lineLabels} />
             ) : (
               <div className="flex h-[240px] items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">
                 {t("dashboard_pending_data")}

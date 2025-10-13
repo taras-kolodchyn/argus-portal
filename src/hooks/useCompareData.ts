@@ -9,7 +9,7 @@ export interface CompareMetricDefinition {
   unitKey: string;
   decimals: number;
   color: string;
-  preferred: "lower" | "higher" | "target";
+  preferred: "lower" | "higher";
 }
 
 export interface CompareSummary {
@@ -56,14 +56,6 @@ const METRICS: CompareMetricDefinition[] = [
     color: "hsl(12 86% 58%)",
     preferred: "lower",
   },
-  {
-    id: "water",
-    labelKey: "metric_water",
-    unitKey: "metric_units_water",
-    decimals: 2,
-    color: "var(--accent)",
-    preferred: "target",
-  },
 ];
 
 interface LocationSeed {
@@ -84,7 +76,6 @@ const LOCATION_SEED: LocationSeed[] = [
       aqi: 48,
       noise: 56,
       radiation: 0.11,
-      water: 7.2,
     },
   },
   {
@@ -96,7 +87,6 @@ const LOCATION_SEED: LocationSeed[] = [
       aqi: 38,
       noise: 49,
       radiation: 0.09,
-      water: 7.5,
     },
   },
   {
@@ -108,7 +98,6 @@ const LOCATION_SEED: LocationSeed[] = [
       aqi: 72,
       noise: 62,
       radiation: 0.14,
-      water: 6.8,
     },
   },
   {
@@ -120,7 +109,6 @@ const LOCATION_SEED: LocationSeed[] = [
       aqi: 44,
       noise: 52,
       radiation: 0.1,
-      water: 7.4,
     },
   },
 ];
@@ -141,8 +129,8 @@ function initializeDatasets(): Record<string, ComparePoint[]> {
         const variation =
           metric.id === "radiation"
             ? dailyWave * 0.02 + randomBetween(-0.015, 0.015)
-            : metric.id === "water"
-            ? dailyWave * 0.08 + randomBetween(-0.1, 0.1)
+            : metric.id === "noise"
+            ? dailyWave * 5 + randomBetween(-4, 4)
             : dailyWave * 4 + randomBetween(-3, 3);
 
         const value = base + variation;
@@ -170,8 +158,8 @@ function updateDatasets(state: Record<string, ComparePoint[]>): Record<string, C
           const drift =
             metric.id === "radiation"
               ? randomBetween(-0.01, 0.01)
-              : metric.id === "water"
-              ? randomBetween(-0.05, 0.05)
+              : metric.id === "noise"
+              ? randomBetween(-3, 3)
               : randomBetween(-2, 2);
           values[metric.id] = round(metric.id, values[metric.id] + drift);
         });

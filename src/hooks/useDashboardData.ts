@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-export const DASHBOARD_METRIC_IDS = ["aqi", "noise", "radiation", "water"] as const;
+export const DASHBOARD_METRIC_IDS = ["aqi", "noise", "radiation"] as const;
 
 export type MetricId = (typeof DASHBOARD_METRIC_IDS)[number];
 export type MetricStatus = "good" | "moderate" | "alert";
@@ -84,21 +84,12 @@ const METRICS_META: Record<MetricId, MetricMeta> = {
     bounds: [0.05, 0.6],
     volatility: 0.02,
   },
-  water: {
-    labelKey: "metric_water",
-    unitKey: "metric_units_water",
-    decimals: 2,
-    baseline: 7.2,
-    bounds: [5.5, 8.8],
-    volatility: 0.1,
-  },
 };
 
 const METRIC_SEEDS: Record<MetricId, number> = {
   aqi: 0.3,
   noise: 0.9,
   radiation: 1.7,
-  water: 2.3,
 };
 
 interface SensorMeta {
@@ -115,13 +106,6 @@ const SENSOR_META: SensorMeta[] = [
     name: "Kyiv City Hall",
     coordinates: [50.4501, 30.5234],
     metricId: "aqi",
-  },
-  {
-    id: "podil",
-    name: "Podil Riverside",
-    coordinates: [50.471, 30.5061],
-    metricId: "water",
-    baselineOffset: -0.2,
   },
   {
     id: "obolon",
@@ -211,12 +195,6 @@ function resolveStatus(id: MetricId, value: number): MetricStatus {
       if (value <= 0.15) return "good";
       if (value <= 0.3) return "moderate";
       return "alert";
-    case "water": {
-      const delta = Math.abs(7 - value);
-      if (delta <= 0.4) return "good";
-      if (delta <= 1) return "moderate";
-      return "alert";
-    }
     default:
       return "moderate";
   }

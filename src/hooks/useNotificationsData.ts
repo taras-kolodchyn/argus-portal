@@ -33,14 +33,6 @@ const seedNotifications: NotificationState = [
   },
   {
     id: "notif-003",
-    titleKey: "notification_water_quality_title",
-    descriptionKey: "notification_water_quality_message",
-    severity: "info",
-    timestamp: subHours(new Date(), 4).toISOString(),
-    isRead: false,
-  },
-  {
-    id: "notif-004",
     titleKey: "notification_network_sync_title",
     descriptionKey: "notification_network_sync_message",
     severity: "info",
@@ -48,7 +40,7 @@ const seedNotifications: NotificationState = [
     isRead: true,
   },
   {
-    id: "notif-005",
+    id: "notif-004",
     titleKey: "notification_aqi_improving_title",
     descriptionKey: "notification_aqi_improving_message",
     severity: "warning",

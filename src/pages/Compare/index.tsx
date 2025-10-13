@@ -454,16 +454,6 @@ function determineWinner(
 
   const tolerance = metric.decimals > 0 ? 0.05 : 1;
 
-  if (metric.preferred === "target") {
-    const target = metric.id === "water" ? 7 : 0;
-    const leftDelta = Math.abs(leftValue - target);
-    const rightDelta = Math.abs(rightValue - target);
-    if (Math.abs(leftDelta - rightDelta) <= tolerance) {
-      return "equal";
-    }
-    return leftDelta < rightDelta ? "left" : "right";
-  }
-
   if (Math.abs(leftValue - rightValue) <= tolerance) {
     return "equal";
   }
