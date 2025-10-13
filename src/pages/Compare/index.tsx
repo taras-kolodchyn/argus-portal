@@ -71,6 +71,8 @@ export function ComparePage(): JSX.Element {
   const [activeMetric, setActiveMetric] = useState<MetricId>("aqi");
   const [exportState, setExportState] = useState<ExportState | null>(null);
 
+  const palette = useMemo(() => getMetricPalette(activeMetric), [activeMetric]);
+
   useEffect(() => {
     if (!data || data.locations.length === 0) {
       return;
@@ -191,21 +193,27 @@ export function ComparePage(): JSX.Element {
                     key === "left" ? leftLocation?.name ?? "A" : rightLocation?.name ?? "B",
                   ]}
                 />
-                <Legend />
+                <Legend
+                  wrapperStyle={{
+                    fontSize: "12px",
+                    color: "hsl(var(--muted-foreground))",
+                  }}
+                />
                 <Line
                   type="monotone"
                   dataKey="left"
-                  stroke="var(--primary)"
-                  strokeWidth={2}
-                  dot={false}
+                  stroke={palette.left}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, strokeWidth: 0, stroke: palette.left, fill: palette.left }}
                   name={leftLocation?.name ?? t("compare_location_a")}
                 />
                 <Line
                   type="monotone"
                   dataKey="right"
-                  stroke="var(--accent)"
-                  strokeWidth={2}
-                  dot={false}
+                  stroke={palette.right}
+                  strokeWidth={2.5}
+                  strokeDasharray="6 4"
+                  dot={{ r: 3, strokeWidth: 0, stroke: palette.right, fill: palette.right }}
                   name={rightLocation?.name ?? t("compare_location_b")}
                 />
               </LineChart>
@@ -442,6 +450,31 @@ function renderAdvantageBadge(
       {name}
     </Badge>
   );
+}
+
+function getMetricPalette(metric: MetricId): { left: string; right: string } {
+  switch (metric) {
+    case "aqi":
+      return {
+        left: "#22c55e",
+        right: "#60a5fa",
+      };
+    case "noise":
+      return {
+        left: "#6366f1",
+        right: "#a855f7",
+      };
+    case "radiation":
+      return {
+        left: "#22c55e",
+        right: "#ef4444",
+      };
+    default:
+      return {
+        left: "#22c55e",
+        right: "#60a5fa",
+      };
+  }
 }
 
 function determineWinner(

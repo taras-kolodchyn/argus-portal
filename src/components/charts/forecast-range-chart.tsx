@@ -40,12 +40,12 @@ export function ForecastRangeChart({ data }: ForecastRangeChartProps): JSX.Eleme
         <AreaChart data={formatted} margin={{ top: 16, right: 20, left: 20, bottom: 12 }}>
           <defs>
             <linearGradient id={bandGradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25} />
-              <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.05} />
+              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.28} />
+              <stop offset="95%" stopColor="#22c55e" stopOpacity={0.08} />
             </linearGradient>
             <linearGradient id={lineGradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.9} />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity={0.9} />
+              <stop offset="0%" stopColor="#22c55e" stopOpacity={0.95} />
+              <stop offset="100%" stopColor="#facc15" stopOpacity={0.95} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
@@ -99,9 +99,10 @@ export function ForecastRangeChart({ data }: ForecastRangeChartProps): JSX.Eleme
             type="monotone"
             dataKey="value"
             stroke={`url(#${lineGradientId})`}
-            strokeWidth={2}
+            strokeWidth={3}
+            strokeDasharray="4 1"
             fill="none"
-            activeDot={{ r: 4 }}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "#34d399" }}
             isAnimationActive={false}
           />
         </AreaChart>
