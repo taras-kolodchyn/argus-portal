@@ -37,6 +37,8 @@ The dev server runs at [http://localhost:5173](http://localhost:5173). The map u
 - Devices page with status filter, shadcn/ui table, and “Add device” dialog (mock mutation)
 - Notifications page with severity styling
 - Profile page exposing theme, language, and live Keycloak session details
+- Secure registration flow with client-side password hardening and policy consent
+- World map view with 100 simulated European sensors for fast situational awareness
 
 ## Local Keycloak Stack
 
@@ -65,6 +67,10 @@ The repository ships with a secure-by-default Keycloak + Postgres stack for loca
 
 5. (Optional) Run `make keycloak-bootstrap` to create/update the default `argus-portal-web` client in the configured realm.
 
+### Google reCAPTCHA v3
+
+Set up Google reCAPTCHA v3, create a site key, and add `VITE_RECAPTCHA_SITE_KEY` to `.env.local`. Registration is disabled until a valid token is returned.
+
 > **Note:** `make keycloak-up` now auto-generates `.env` with `admin` / `P@ssw0rd` for both Keycloak and Postgres. This is convenient for local development but must be replaced with strong secrets before any shared deployment.
 >
 > The same command also creates `.env.local` with default Vite settings:
@@ -92,6 +98,7 @@ Expose the Keycloak settings to Vite (dev or production) by creating `.env.local
 VITE_KEYCLOAK_URL=https://127.0.0.1:8443
 VITE_KEYCLOAK_REALM=master
 VITE_KEYCLOAK_CLIENT_ID=argus-portal-web
+VITE_RECAPTCHA_SITE_KEY=your-recaptcha-site-key
 ```
 
 Restart the dev server after updating env variables. When configured, the header exposes Log in / Log out actions and the Profile page renders live user metadata.

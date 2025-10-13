@@ -1,4 +1,5 @@
 import {
+  Globe2,
   BellRing,
   LayoutDashboard,
   ServerCog,
@@ -24,6 +25,11 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/devices",
   },
   {
+    icon: Globe2,
+    labelKey: "world_map",
+    to: "/world-map",
+  },
+  {
     icon: BellRing,
     labelKey: "notifications",
     to: "/notifications",
@@ -34,4 +40,3 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/profile",
   },
 ];
-

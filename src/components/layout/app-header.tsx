@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { Loader2, LogIn, LogOut, UserCircle2 } from "lucide-react";
 
 import { LanguageToggle } from "@/components/layout/language-toggle";
@@ -82,25 +82,32 @@ export function AppHeader(): JSX.Element {
               <span className="text-xs font-medium text-muted-foreground">
                 {t("auth_session")}
               </span>
-              <Button
-                className="h-10 w-[140px]"
-                onClick={() => {
-                  void auth.login();
-                }}
-                disabled={auth.isLoading}
-              >
-                {auth.isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t("auth_loading")}
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="mr-2 h-4 w-4" />
-                    {t("login")}
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button asChild size="sm" className="h-10 w-[140px]">
+                  <Link to="/register">{t("register_nav")}</Link>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10"
+                  onClick={() => {
+                    void auth.login();
+                  }}
+                  disabled={auth.isLoading}
+                >
+                  {auth.isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {t("auth_loading")}
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="mr-2 h-4 w-4" />
+                      {t("login")}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           )
         ) : (

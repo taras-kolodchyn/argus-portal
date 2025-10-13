@@ -80,7 +80,8 @@ keycloak-up:
 	printf '%s\n' \
 		'VITE_KEYCLOAK_URL=https://127.0.0.1:8443' \
 		'VITE_KEYCLOAK_REALM=master' \
-		'VITE_KEYCLOAK_CLIENT_ID=argus-portal-web' > .env.local
+		'VITE_KEYCLOAK_CLIENT_ID=argus-portal-web' \
+		'VITE_RECAPTCHA_SITE_KEY=' > .env.local
 	docker compose up -d
 
 keycloak-bootstrap:

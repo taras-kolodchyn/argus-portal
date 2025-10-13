@@ -39,6 +39,10 @@ APP_ORIGIN="${APP_ORIGIN%/}"
 if [[ -z "${APP_ORIGIN}" ]]; then
   APP_ORIGIN="http://localhost:4173"
 fi
+APP_ORIGIN="${APP_ORIGIN%/}"
+if [[ -z "${APP_ORIGIN}" ]]; then
+  APP_ORIGIN="http://localhost:4173"
+fi
 
 REDIRECT_URI="${APP_ORIGIN}/*"
 SILENT_SSO_URL="https://127.0.0.1:8443/*"
