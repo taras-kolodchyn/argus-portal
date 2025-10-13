@@ -1,6 +1,6 @@
 import type { JSX } from "react";
-import { useMemo } from "react";
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from "react-leaflet";
+import { useMemo, useEffect } from "react";
+import { MapContainer, TileLayer, CircleMarker, Tooltip, useMapEvents } from "react-leaflet";
 
 export type WorldMapStatus = "online" | "offline" | "maintenance";
 
@@ -24,6 +24,12 @@ export interface WorldMapSensor {
   metadata?: Record<string, string | number>;
 }
 
+export interface ViewportState {
+  bounds: [number, number, number, number];
+  center: { latitude: number; longitude: number };
+  zoom: number;
+}
+
 export interface WorldMapProps {
   sensors: WorldMapSensor[];
   tileUrl?: string;
@@ -36,6 +42,7 @@ export interface WorldMapProps {
   markerRadius?: (sensor: WorldMapSensor) => number;
   markerColor?: (sensor: WorldMapSensor) => string;
   renderTooltip?: (sensor: WorldMapSensor) => JSX.Element;
+  onViewportChange?: (viewport: ViewportState) => void;
 }
 
 const DEFAULT_TILE = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
@@ -91,6 +98,36 @@ function defaultTooltip(sensor: WorldMapSensor): JSX.Element {
   );
 }
 
+function ViewportWatcher({ onViewportChange }: { onViewportChange: (viewport: ViewportState) => void }) {
+  const map = useMapEvents({
+    moveend() {
+      const bounds = map.getBounds();
+      onViewportChange({
+        bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+        center: {
+          latitude: map.getCenter().lat,
+          longitude: map.getCenter().lng,
+        },
+        zoom: map.getZoom(),
+      });
+    },
+  });
+
+  useEffect(() => {
+    const bounds = map.getBounds();
+    onViewportChange({
+      bounds: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()],
+      center: {
+        latitude: map.getCenter().lat,
+        longitude: map.getCenter().lng,
+      },
+      zoom: map.getZoom(),
+    });
+  }, [map, onViewportChange]);
+
+  return null;
+}
+
 export function WorldMap({
   sensors,
   tileUrl = DEFAULT_TILE,
@@ -103,6 +140,7 @@ export function WorldMap({
   markerRadius = defaultMarkerRadius,
   markerColor = defaultMarkerColor,
   renderTooltip = defaultTooltip,
+  onViewportChange,
 }: WorldMapProps): JSX.Element {
   const markers = useMemo(() => sensors, [sensors]);
 
@@ -118,6 +156,7 @@ export function WorldMap({
       attributionControl
     >
       <TileLayer attribution={attribution} url={tileUrl} />
+      {onViewportChange ? <ViewportWatcher onViewportChange={onViewportChange} /> : null}
       {markers.map((sensor) => (
         <CircleMarker
           key={sensor.id}

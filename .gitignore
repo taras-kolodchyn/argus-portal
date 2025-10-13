@@ -24,3 +24,4 @@ certs/
 *.njsproj
 *.sln
 *.sw?
+/server/.tmp

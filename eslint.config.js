@@ -7,7 +7,7 @@ import queryPlugin from "@tanstack/eslint-plugin-query";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores(["dist", "packages/world-map/dist"]),
+  globalIgnores(["dist", "packages/world-map/dist", "server/**"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [

@@ -39,6 +39,7 @@ The dev server runs at [http://localhost:5173](http://localhost:5173). The map u
 - Profile page exposing theme, language, and live Keycloak session details
 - Secure registration flow with client-side password hardening and policy consent
 - World map view with 100 simulated European sensors for fast situational awareness
+- Optional world map backend that serves hundreds of thousands of synthetic devices in real time
 
 ## Local Keycloak Stack
 
@@ -71,6 +72,16 @@ The repository ships with a secure-by-default Keycloak + Postgres stack for loca
 
 Set up Google reCAPTCHA v3, create a site key, and add `VITE_RECAPTCHA_SITE_KEY` to `.env.local`. Registration is disabled until a valid token is returned.
 
+### World Map Backend
+
+The `server/` workspace hosts a Fastify-based data generator that streams hundreds of thousands of synthetic devices. Run it locally to test the full map flow:
+
+```bash
+npm run server
+```
+
+The service exposes `http://localhost:4000/api/sensors?bbox=` and `/api/summary`. Configure the frontend with `VITE_API_URL` to point at this server.
+
 > **Note:** `make keycloak-up` now auto-generates `.env` with `admin` / `P@ssw0rd` for both Keycloak and Postgres. This is convenient for local development but must be replaced with strong secrets before any shared deployment.
 >
 > The same command also creates `.env.local` with default Vite settings:
@@ -99,6 +110,7 @@ VITE_KEYCLOAK_URL=https://127.0.0.1:8443
 VITE_KEYCLOAK_REALM=master
 VITE_KEYCLOAK_CLIENT_ID=argus-portal-web
 VITE_RECAPTCHA_SITE_KEY=your-recaptcha-site-key
+VITE_API_URL=http://localhost:4000
 ```
 
 Restart the dev server after updating env variables. When configured, the header exposes Log in / Log out actions and the Profile page renders live user metadata.

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint --max-warnings=0 .",
     "preview": "vite preview",
-    "build:packages": "npm run lint --workspaces=false && npm run build --workspace @argus/world-map"
+    "build:packages": "npm run lint --workspaces=false && npm run build --workspace @argus/world-map",
+    "server": "TMPDIR=$PWD/server/.tmp npm run dev --prefix server"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.3",
