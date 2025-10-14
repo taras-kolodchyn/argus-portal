@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -24,6 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { apiFetch, configureApiClient } from "@/lib/api-client";
 import { getKeycloakEnvConfig } from "@/lib/env";
+import type { AuthContextValue, AuthProfile, LoginCredentials } from "@/hooks/auth-types";
+import { AuthContext } from "@/hooks/useAuth";
 
 const SESSION_STORAGE_KEY = "argus.portal.auth";
 const STORAGE_BROADCAST_KEY = "argus.portal.auth.event";
@@ -40,13 +40,6 @@ interface TokenClaims extends JwtPayload {
   given_name?: string;
   family_name?: string;
   name?: string;
-}
-
-interface AuthProfile {
-  username: string | null;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
 }
 
 interface StoredTokens {
@@ -78,23 +71,6 @@ interface AuthBroadcastLogoutMessage {
 
 type AuthBroadcastMessage = AuthBroadcastTokensMessage | AuthBroadcastLogoutMessage;
 
-export interface LoginCredentials {
-  email: string;
-  password: string;
-  captchaToken?: string;
-}
-
-interface AuthContextValue {
-  isEnabled: boolean;
-  isLoading: boolean;
-  isReady: boolean;
-  isAuthenticated: boolean;
-  profile: AuthProfile | null;
-  token: string | null;
-  login: (credentials: LoginCredentials) => Promise<void>;
-  logout: (redirect?: boolean) => void;
-}
-
 interface LogoutOptions {
   redirect: boolean;
   broadcast: boolean;
@@ -103,8 +79,6 @@ interface LogoutOptions {
 }
 
 const isBrowser = typeof window !== "undefined";
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -817,13 +791,4 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       </Dialog>
     </AuthContext.Provider>
   );
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useAuth(): AuthContextValue {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
 }

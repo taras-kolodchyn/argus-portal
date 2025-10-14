@@ -13,6 +13,32 @@ use crate::models::user::KeycloakUser;
 
 const TOKEN_REFRESH_LEEWAY: Duration = Duration::from_secs(60);
 const TOKEN_REFRESH_MIN_LEEWAY_SECS: u64 = 1;
+
+fn compute_refresh_schedule(expires_in: u64, issued_at: Instant) -> (Instant, Instant) {
+    let expires_duration = Duration::from_secs(expires_in);
+    let expires_at = issued_at + expires_duration;
+
+    let half = expires_in / 2;
+    let mut leeway_secs = half;
+    if leeway_secs < TOKEN_REFRESH_MIN_LEEWAY_SECS {
+        leeway_secs = TOKEN_REFRESH_MIN_LEEWAY_SECS;
+    }
+    if leeway_secs > TOKEN_REFRESH_LEEWAY.as_secs() {
+        leeway_secs = TOKEN_REFRESH_LEEWAY.as_secs();
+    }
+    if leeway_secs >= expires_in {
+        leeway_secs = expires_in.saturating_sub(1);
+    }
+
+    let leeway = Duration::from_secs(leeway_secs);
+    let mut refresh_at = expires_at.checked_sub(leeway).unwrap_or(expires_at);
+
+    if refresh_at <= issued_at {
+        refresh_at = issued_at + Duration::from_secs(TOKEN_REFRESH_MIN_LEEWAY_SECS);
+    }
+
+    (expires_at, refresh_at)
+}
 const TOKEN_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
@@ -67,6 +93,7 @@ struct TokenState {
     access_token: String,
     expires_at: Instant,
     expires_in: u64,
+    next_refresh_at: Instant,
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,29 +198,10 @@ impl KeycloakService {
                 return Duration::ZERO;
             }
 
-            let mut leeway_secs = state.expires_in / 2;
-            if leeway_secs < TOKEN_REFRESH_MIN_LEEWAY_SECS {
-                leeway_secs = TOKEN_REFRESH_MIN_LEEWAY_SECS;
-            }
-            let max_leeway = TOKEN_REFRESH_LEEWAY.as_secs();
-            if leeway_secs > max_leeway {
-                leeway_secs = max_leeway;
-            }
-            if leeway_secs >= state.expires_in {
-                leeway_secs = state.expires_in.saturating_sub(1);
-            }
-
-            let leeway = Duration::from_secs(leeway_secs);
-
-            let target = state
-                .expires_at
-                .checked_sub(leeway)
-                .unwrap_or(state.expires_at);
-
-            if target <= now {
+            if state.next_refresh_at <= now {
                 Duration::from_secs(1)
             } else {
-                target.saturating_duration_since(now)
+                state.next_refresh_at.saturating_duration_since(now)
             }
         } else {
             Duration::ZERO
@@ -252,10 +260,13 @@ impl KeycloakService {
 
         let payload: TokenResponse = response.json().await?;
         let expires_in = payload.expires_in.unwrap_or(300);
+        let issued_at = Instant::now();
+        let (expires_at, next_refresh_at) = compute_refresh_schedule(expires_in, issued_at);
         let state = TokenState {
             access_token: payload.access_token,
             expires_in,
-            expires_at: Instant::now() + Duration::from_secs(expires_in),
+            expires_at,
+            next_refresh_at,
         };
 
         {
