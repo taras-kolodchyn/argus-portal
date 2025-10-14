@@ -165,12 +165,19 @@ impl KeycloakService {
         let guard = self.state.read().await;
         if let Some(state) = guard.as_ref() {
             let now = Instant::now();
-            if state.expires_at <= now + TOKEN_REFRESH_LEEWAY {
-                Duration::ZERO
+            if state.expires_at <= now {
+                return Duration::ZERO;
+            }
+
+            let target = state
+                .expires_at
+                .checked_sub(TOKEN_REFRESH_LEEWAY)
+                .unwrap_or(state.expires_at);
+
+            if target <= now {
+                Duration::from_secs(1)
             } else {
-                state
-                    .expires_at
-                    .saturating_duration_since(now + TOKEN_REFRESH_LEEWAY)
+                target.saturating_duration_since(now)
             }
         } else {
             Duration::ZERO

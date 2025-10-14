@@ -98,13 +98,6 @@ pub struct KeycloakCredential {
     pub value: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct TurnstileVerifyResponse {
-    pub success: bool,
-    #[serde(default, rename = "error-codes")]
-    pub error_codes: Vec<String>,
-}
-
 fn extract_attributes(extra: &HashMap<String, Value>) -> HashMap<String, Vec<String>> {
     extra
         .iter()

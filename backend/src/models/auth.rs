@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    pub captcha_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

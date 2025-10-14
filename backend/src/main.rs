@@ -8,6 +8,7 @@ use reqwest::Client;
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, fmt};
 
+mod captcha;
 mod handlers;
 mod keycloak;
 mod models;
@@ -50,6 +51,7 @@ pub struct AppConfig {
     pub keycloak_public_client_id: String,
     pub keycloak_public_client_secret: Option<String>,
     pub keycloak_tls_insecure: bool,
+    pub cors_allowed_origins: Vec<String>,
 }
 
 impl AppConfig {
@@ -80,6 +82,27 @@ impl AppConfig {
         let keycloak_tls_insecure = env::var("KEYCLOAK_TLS_INSECURE")
             .map(|value| matches_ignore_ascii_case(&value, ["1", "true", "yes", "on"]))
             .unwrap_or(true);
+        let cors_allowed_origins = env::var("BACKEND_ALLOWED_ORIGINS")
+            .ok()
+            .map(|value| {
+                value
+                    .split(',')
+                    .filter_map(|origin| {
+                        let trimmed = origin.trim();
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed.to_owned())
+                        }
+                    })
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_else(|| {
+                vec![
+                    "https://127.0.0.1:5173".to_owned(),
+                    "https://localhost:5173".to_owned(),
+                ]
+            });
 
         Self {
             bind_address,
@@ -94,6 +117,7 @@ impl AppConfig {
             keycloak_public_client_id,
             keycloak_public_client_secret,
             keycloak_tls_insecure,
+            cors_allowed_origins,
         }
     }
 

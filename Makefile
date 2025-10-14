@@ -108,7 +108,8 @@ keycloak-up:
 		'KC_HTTP_CORS_ALLOWED_ORIGINS=*' \
 		'KC_HTTP_CORS_ALLOWED_HEADERS=origin,accept,content-type,x-requested-with,x-turnstile-action,x-turnstile-token' \
 		'KC_HTTP_CORS_ALLOWED_METHODS=GET,POST,OPTIONS,HEAD' \
-		'KEYCLOAK_TLS_INSECURE=true' > .env; \
+		'KEYCLOAK_TLS_INSECURE=true' \
+		'BACKEND_ALLOWED_ORIGINS=https://127.0.0.1:5173,https://localhost:5173' > .env; \
 	echo "[keycloak-up] Writing .env.local for Vite with IP-based Keycloak URL (preserving Turnstile keys)."; \
 	existing_turnstile_site_key=$$(if [ -f .env.local ]; then grep '^VITE_TURNSTILE_SITE_KEY=' .env.local | head -n1 | cut -d= -f2-; fi); \
 	existing_turnstile_verify_url=$$(if [ -f .env.local ]; then grep '^VITE_TURNSTILE_VERIFY_URL=' .env.local | head -n1 | cut -d= -f2-; fi); \

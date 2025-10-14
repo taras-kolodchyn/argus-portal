@@ -49,6 +49,7 @@ interface AuthApiResponse {
 export interface LoginCredentials {
   email: string;
   password: string;
+  captchaToken?: string;
 }
 
 interface AuthContextValue {
@@ -286,7 +287,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   }, [applyTokens, isAuthConfigured, performLogout, refreshTokens]);
 
   const login = useCallback(
-    async ({ email, password }: LoginCredentials) => {
+    async (credentials: LoginCredentials) => {
+      const { email, password } = credentials;
       if (!isAuthConfigured) {
         throw new Error("Authentication is not configured");
       }
@@ -294,6 +296,11 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       setState((prev) => ({ ...prev, isLoading: true }));
 
       try {
+        const body: Record<string, unknown> = { email, password };
+        if (typeof credentials.captchaToken === "string") {
+          body.captchaToken = credentials.captchaToken;
+        }
+
         const response = await apiFetch(
           "/api/auth/login",
           {
@@ -301,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify(body),
           },
           { skipAuth: true },
         );

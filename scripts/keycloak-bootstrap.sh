@@ -164,6 +164,7 @@ docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh create clients -r "${
 echo "[keycloak-bootstrap] Done. Keycloak client '${VITE_KEYCLOAK_CLIENT_ID}' is ready."
 
 printf "[keycloak-bootstrap] Configuring service client '%s'...\n" "${KEYCLOAK_ADMIN_CLIENT_ID}"
+
 SERVICE_CLIENT_PAYLOAD=$(cat <<JSON
 {
   "clientId": "${KEYCLOAK_ADMIN_CLIENT_ID}",

@@ -1,10 +1,11 @@
-use axum::{extract::State, http::StatusCode, Json};
+use axum::{Json, extract::State, http::StatusCode};
 use tracing::{error, info, warn};
 
+use crate::AppState;
+use crate::captcha::{captcha_error_status, ensure_valid};
 use crate::keycloak::{KeycloakError, UserTokenSet};
 use crate::models::auth::{AuthResponse, LoginRequest, RefreshRequest};
 use crate::models::user::ErrorResponse;
-use crate::AppState;
 
 const DEFAULT_SCOPE: &str = "openid";
 
@@ -12,14 +13,25 @@ pub async fn login_handler(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<(StatusCode, Json<AuthResponse>), (StatusCode, Json<ErrorResponse>)> {
-    let email = payload.email.trim();
-    if email.is_empty() || payload.password.trim().is_empty() {
+    let LoginRequest {
+        email,
+        password,
+        captcha_token,
+    } = payload;
+
+    let email = email.trim();
+    if email.is_empty() || password.trim().is_empty() {
         return Err(invalid_request("Email and password are required"));
+    }
+
+    if let Err(error) = ensure_valid(&state, captcha_token.as_deref()).await {
+        let (status, message) = captcha_error_status(error);
+        return Err((status, Json(ErrorResponse::new(message.to_owned()))));
     }
 
     match state
         .keycloak
-        .password_grant(email, payload.password.as_str(), Some(DEFAULT_SCOPE))
+        .password_grant(email, password.as_str(), Some(DEFAULT_SCOPE))
         .await
     {
         Ok(tokens) => {
@@ -68,7 +80,10 @@ fn map_token_error(
 ) -> (StatusCode, Json<ErrorResponse>) {
     match error {
         KeycloakError::InvalidGrant { description, .. } => {
-            warn!("[Login] {action} invalid_grant subject={subject} desc={:?}", description);
+            warn!(
+                "[Login] {action} invalid_grant subject={subject} desc={:?}",
+                description
+            );
             (
                 StatusCode::UNAUTHORIZED,
                 Json(ErrorResponse::new("Invalid email or password".to_owned())),
@@ -78,7 +93,9 @@ fn map_token_error(
             error!(?source, "[Login] {action} request failed");
             (
                 StatusCode::BAD_GATEWAY,
-                Json(ErrorResponse::new("Identity provider unavailable".to_owned())),
+                Json(ErrorResponse::new(
+                    "Identity provider unavailable".to_owned(),
+                )),
             )
         }
         KeycloakError::UnexpectedStatus { status, message } => {
@@ -92,7 +109,9 @@ fn map_token_error(
             error!("[Login] {action} token unavailable");
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                Json(ErrorResponse::new("Identity provider unavailable".to_owned())),
+                Json(ErrorResponse::new(
+                    "Identity provider unavailable".to_owned(),
+                )),
             )
         }
     }
