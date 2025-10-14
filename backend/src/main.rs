@@ -47,6 +47,8 @@ pub struct AppConfig {
     pub keycloak_realm: String,
     pub keycloak_admin_client_id: String,
     pub keycloak_admin_client_secret: String,
+    pub keycloak_public_client_id: String,
+    pub keycloak_public_client_secret: Option<String>,
     pub keycloak_tls_insecure: bool,
 }
 
@@ -72,6 +74,9 @@ impl AppConfig {
             env::var("KEYCLOAK_ADMIN_CLIENT_ID").unwrap_or_else(|_| "argus-backend".into());
         let keycloak_admin_client_secret = env::var("KEYCLOAK_ADMIN_CLIENT_SECRET")
             .unwrap_or_else(|_| "argus-backend-secret".into());
+        let keycloak_public_client_id =
+            env::var("KEYCLOAK_PUBLIC_CLIENT_ID").unwrap_or_else(|_| "argus-portal-web".into());
+        let keycloak_public_client_secret = env::var("KEYCLOAK_PUBLIC_CLIENT_SECRET").ok();
         let keycloak_tls_insecure = env::var("KEYCLOAK_TLS_INSECURE")
             .map(|value| matches_ignore_ascii_case(&value, ["1", "true", "yes", "on"]))
             .unwrap_or(true);
@@ -86,6 +91,8 @@ impl AppConfig {
             keycloak_realm,
             keycloak_admin_client_id,
             keycloak_admin_client_secret,
+            keycloak_public_client_id,
+            keycloak_public_client_secret,
             keycloak_tls_insecure,
         }
     }
@@ -144,6 +151,7 @@ async fn main() {
         %addr,
         realm = %config.keycloak_realm,
         client_id = %config.keycloak_admin_client_id,
+        public_client = %config.keycloak_public_client_id,
         insecure_tls = %config.keycloak_tls_insecure,
         "Starting Keycloak backend proxy"
     );

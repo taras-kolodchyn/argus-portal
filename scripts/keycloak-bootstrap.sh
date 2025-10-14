@@ -142,7 +142,7 @@ CLIENT_PAYLOAD=$(cat <<JSON
   "protocol": "openid-connect",
   "publicClient": true,
   "standardFlowEnabled": true,
-  "directAccessGrantsEnabled": false,
+  "directAccessGrantsEnabled": true,
   "redirectUris": ["*"],
   "webOrigins": ["*"],
   "attributes": {

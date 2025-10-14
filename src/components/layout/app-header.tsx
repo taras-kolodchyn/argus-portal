@@ -1,8 +1,8 @@
 import type { JSX } from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink, useLocation } from "react-router-dom";
-import { Loader2, LogIn, LogOut, UserCircle2 } from "lucide-react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { LogIn, LogOut, UserCircle2 } from "lucide-react";
 
 import { AppLogo } from "@/components/layout/app-logo";
 import { LanguageToggle } from "@/components/layout/language-toggle";
@@ -16,6 +16,7 @@ export function AppHeader(): JSX.Element {
   const { t } = useTranslation();
   const location = useLocation();
   const auth = useAuth();
+  const navigate = useNavigate();
 
   const pageTitle = useMemo(() => {
     const active = NAV_ITEMS.find((item) => item.to === location.pathname);
@@ -78,13 +79,7 @@ export function AppHeader(): JSX.Element {
                     {auth.profile.email ?? auth.profile.username ?? ""}
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    void auth.logout();
-                  }}
-                >
+                <Button variant="outline" size="sm" onClick={() => auth.logout(true)}>
                   <LogOut className="mr-1 h-3.5 w-3.5" />
                   {t("logout")}
                 </Button>
@@ -99,21 +94,12 @@ export function AppHeader(): JSX.Element {
                   variant="outline"
                   className="h-10"
                   onClick={() => {
-                    void auth.login();
+                    void navigate("/auth/login");
                   }}
-                  disabled={auth.isLoading || !auth.isReady}
+                  disabled={!auth.isReady}
                 >
-                  {auth.isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {t("auth_loading")}
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="mr-2 h-4 w-4" />
-                      {t("login")}
-                    </>
-                  )}
+                  <LogIn className="mr-2 h-4 w-4" />
+                  {t("login")}
                 </Button>
               </div>
             )}

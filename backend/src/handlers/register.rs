@@ -70,6 +70,13 @@ fn map_keycloak_error(err: KeycloakError) -> (StatusCode, Json<ErrorResponse>) {
                 Json(ErrorResponse::new("Identity service error".to_owned())),
             )
         }
+        KeycloakError::InvalidGrant { .. } => {
+            error!("Unexpected invalid grant while registering user");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse::new("Identity service error".to_owned())),
+            )
+        }
     }
 }
 

@@ -93,6 +93,7 @@ keycloak-up:
 		'KEYCLOAK_ADMIN_PASSWORD=P@ssw0rd' \
 		'KEYCLOAK_ADMIN_CLIENT_ID=argus-backend' \
 		'KEYCLOAK_ADMIN_CLIENT_SECRET=argus-backend-secret' \
+		'KEYCLOAK_PUBLIC_CLIENT_ID=argus-portal-web' \
 		'' \
 		'KC_HTTP_PORT=8080' \
 		'KEYCLOAK_BASE_URL=https://127.0.0.1:8443' \

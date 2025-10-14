@@ -2,6 +2,7 @@ use axum::{Router, http::Method, routing::post};
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::AppState;
+use crate::handlers::auth::{login_handler, refresh_handler};
 use crate::handlers::register::register_handler;
 
 pub fn create_router(state: AppState) -> Router {
@@ -12,6 +13,8 @@ pub fn create_router(state: AppState) -> Router {
 
     Router::new()
         .route("/api/auth/register", post(register_handler))
+        .route("/api/auth/login", post(login_handler))
+        .route("/api/auth/refresh", post(refresh_handler))
         .with_state(state)
         .layer(cors)
 }

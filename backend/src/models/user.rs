@@ -81,10 +81,10 @@ impl KeycloakUser {
             first_name: request.first_name.clone(),
             last_name: request.last_name.clone(),
             enabled: true,
-            email_verified: false,
+            email_verified: true,
             attributes,
             credentials,
-            required_actions: vec!["VERIFY_EMAIL".to_owned()],
+            required_actions: Vec::new(),
         }
     }
 }

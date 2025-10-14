@@ -22,6 +22,11 @@ pub enum KeycloakError {
     Request(#[from] reqwest::Error),
     #[error("unexpected keycloak status {status}: {message}")]
     UnexpectedStatus { status: StatusCode, message: String },
+    #[error("invalid grant: {error}")]
+    InvalidGrant {
+        error: String,
+        description: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -49,8 +54,10 @@ pub struct KeycloakService {
 struct KeycloakSettings {
     token_endpoint: String,
     users_endpoint: String,
-    client_id: String,
-    client_secret: String,
+    admin_client_id: String,
+    admin_client_secret: String,
+    public_client_id: String,
+    public_client_secret: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +71,31 @@ struct TokenState {
 struct TokenResponse {
     access_token: String,
     expires_in: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserTokenResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: Option<u64>,
+    refresh_expires_in: Option<u64>,
+    token_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct KeycloakErrorResponse {
+    error: String,
+    #[serde(default)]
+    error_description: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UserTokenSet {
+    pub token_type: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_in: u64,
+    pub refresh_expires_in: Option<u64>,
 }
 
 impl KeycloakService {
@@ -180,8 +212,8 @@ impl KeycloakService {
             .post(&self.settings.token_endpoint)
             .form(&[
                 ("grant_type", "client_credentials"),
-                ("client_id", self.settings.client_id.as_str()),
-                ("client_secret", self.settings.client_secret.as_str()),
+                ("client_id", self.settings.admin_client_id.as_str()),
+                ("client_secret", self.settings.admin_client_secret.as_str()),
             ])
             .send()
             .await?;
@@ -284,6 +316,118 @@ impl KeycloakService {
 
         Err(KeycloakError::TokenUnavailable)
     }
+
+    pub async fn password_grant(
+        &self,
+        username: &str,
+        password: &str,
+        scope: Option<&str>,
+    ) -> Result<UserTokenSet, KeycloakError> {
+        let mut form = vec![
+            ("grant_type".to_string(), "password".to_string()),
+            (
+                "client_id".to_string(),
+                self.settings.public_client_id.clone(),
+            ),
+            ("username".to_string(), username.to_owned()),
+            ("password".to_string(), password.to_owned()),
+        ];
+
+        if let Some(secret) = &self.settings.public_client_secret {
+            form.push(("client_secret".to_string(), secret.clone()));
+        }
+
+        if let Some(scope) = scope {
+            form.push(("scope".to_string(), scope.to_owned()));
+        }
+
+        let response = self
+            .client
+            .post(&self.settings.token_endpoint)
+            .form(&form)
+            .send()
+            .await?;
+
+        self.handle_user_token_response(response).await
+    }
+
+    pub async fn refresh_user_token(
+        &self,
+        refresh_token: &str,
+        scope: Option<&str>,
+    ) -> Result<UserTokenSet, KeycloakError> {
+        let mut form = vec![
+            ("grant_type".to_string(), "refresh_token".to_string()),
+            (
+                "client_id".to_string(),
+                self.settings.public_client_id.clone(),
+            ),
+            ("refresh_token".to_string(), refresh_token.to_owned()),
+        ];
+
+        if let Some(secret) = &self.settings.public_client_secret {
+            form.push(("client_secret".to_string(), secret.clone()));
+        }
+
+        if let Some(scope) = scope {
+            form.push(("scope".to_string(), scope.to_owned()));
+        }
+
+        let response = self
+            .client
+            .post(&self.settings.token_endpoint)
+            .form(&form)
+            .send()
+            .await?;
+
+        self.handle_user_token_response(response).await
+    }
+
+    async fn handle_user_token_response(
+        &self,
+        response: reqwest::Response,
+    ) -> Result<UserTokenSet, KeycloakError> {
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            if status == StatusCode::BAD_REQUEST || status == StatusCode::UNAUTHORIZED {
+                if let Ok(err_payload) = serde_json::from_str::<KeycloakErrorResponse>(&body) {
+                    return Err(KeycloakError::InvalidGrant {
+                        error: err_payload.error,
+                        description: err_payload.error_description,
+                    });
+                }
+            }
+            return Err(KeycloakError::UnexpectedStatus {
+                status,
+                message: body,
+            });
+        }
+
+        let payload: UserTokenResponse = response.json().await?;
+        let refresh_token =
+            payload
+                .refresh_token
+                .ok_or_else(|| KeycloakError::UnexpectedStatus {
+                    status,
+                    message: "missing refresh_token in Keycloak response".to_owned(),
+                })?;
+
+        let token_type = payload
+            .token_type
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "Bearer".to_owned());
+
+        let expires_in = payload.expires_in.unwrap_or(300);
+
+        Ok(UserTokenSet {
+            token_type,
+            access_token: payload.access_token,
+            refresh_token,
+            expires_in,
+            refresh_expires_in: payload.refresh_expires_in,
+        })
+    }
 }
 
 impl KeycloakSettings {
@@ -291,8 +435,10 @@ impl KeycloakSettings {
         Self {
             token_endpoint: config.keycloak_token_endpoint(),
             users_endpoint: config.keycloak_users_endpoint(),
-            client_id: config.keycloak_admin_client_id.clone(),
-            client_secret: config.keycloak_admin_client_secret.clone(),
+            admin_client_id: config.keycloak_admin_client_id.clone(),
+            admin_client_secret: config.keycloak_admin_client_secret.clone(),
+            public_client_id: config.keycloak_public_client_id.clone(),
+            public_client_secret: config.keycloak_public_client_secret.clone(),
         }
     }
 }

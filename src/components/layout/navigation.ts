@@ -4,6 +4,7 @@ import {
   GitCompare,
   LayoutDashboard,
   MapPinned,
+  ServerCog,
   UserCircle2,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +30,11 @@ export const NAV_ITEMS: NavItem[] = [
     icon: GitCompare,
     labelKey: "compare",
     to: "/compare",
+  },
+  {
+    icon: ServerCog,
+    labelKey: "devices",
+    to: "/devices",
   },
   {
     icon: BellRing,

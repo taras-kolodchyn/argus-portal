@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { LogIn, LogOut, ShieldCheck, UserCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -18,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 export function ProfilePage(): JSX.Element {
   const { t } = useTranslation();
   const auth = useAuth();
+  const navigate = useNavigate();
 
   const statusBadge = !auth.isEnabled
     ? { label: t("profile_status_offline"), tone: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300" }
@@ -55,18 +57,18 @@ export function ProfilePage(): JSX.Element {
           ) : auth.isAuthenticated && auth.profile ? (
             <AuthenticatedProfileCard />
           ) : (
-            <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-muted/30 p-4">
-              <div>
-                <p className="text-sm font-semibold">{t("auth_not_authenticated")}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t("profile_auth_hint")}
-                </p>
-              </div>
-              <Button
+              <div className="flex items-center justify-between rounded-xl border border-dashed border-border bg-muted/30 p-4">
+                <div>
+                  <p className="text-sm font-semibold">{t("auth_not_authenticated")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("profile_auth_hint")}
+                  </p>
+                </div>
+                <Button
                 onClick={() => {
-                  void auth.login();
+                  void navigate("/auth/login");
                 }}
-              >
+                >
                 <LogIn className="mr-2 h-4 w-4" />
                 {t("login")}
               </Button>

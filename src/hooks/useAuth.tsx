@@ -6,296 +6,340 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
   type JSX,
+  type ReactNode,
 } from "react";
-import Keycloak, {
-  type KeycloakInstance,
-  type KeycloakLoginOptions,
-  type KeycloakTokenParsed,
-  type KeycloakProfile,
-} from "keycloak-js";
+import { useNavigate } from "react-router-dom";
+import { jwtDecode, type JwtPayload } from "jwt-decode";
 
+import { apiFetch, configureApiClient } from "@/lib/api-client";
 import { getKeycloakEnvConfig } from "@/lib/env";
+
+interface TokenClaims extends JwtPayload {
+  preferred_username?: string;
+  email?: string;
+  given_name?: string;
+  family_name?: string;
+  name?: string;
+}
+
+interface AuthProfile {
+  username: string | null;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+interface StoredTokens {
+  tokenType: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+  refreshExpiresAt?: number;
+}
+
+interface AuthApiResponse {
+  tokenType: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  refreshExpiresIn?: number;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
 
 interface AuthContextValue {
   isEnabled: boolean;
   isLoading: boolean;
   isReady: boolean;
   isAuthenticated: boolean;
-  profile: KeycloakProfile | null;
+  profile: AuthProfile | null;
   token: string | null;
-  tokenParsed: KeycloakTokenParsed | undefined;
-  login: (options?: KeycloakLoginOptions) => Promise<void>;
-  logout: () => Promise<void>;
-  refresh: (minValidity?: number) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<void>;
+  logout: (redirect?: boolean) => void;
 }
 
-const authConfig = getKeycloakEnvConfig();
+const SESSION_STORAGE_KEY = "argus.portal.auth";
+const REFRESH_LEEWAY_MS = 60_000; // refresh 60s before expiry
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const defaultValue: AuthContextValue = {
-  isEnabled: false,
-  isLoading: false,
-  isReady: true,
-  isAuthenticated: false,
-  profile: null,
-  token: null,
-  tokenParsed: undefined,
-  login: () => {
-    console.warn("Keycloak is not configured. Set VITE_KEYCLOAK_* variables.");
-    return Promise.resolve();
-  },
-  logout: () => {
-    console.warn("Keycloak is not configured. Set VITE_KEYCLOAK_* variables.");
-    return Promise.resolve();
-  },
-  refresh: () => {
-    console.warn("Keycloak is not configured. Set VITE_KEYCLOAK_* variables.");
-    return Promise.resolve();
-  },
-};
-
-const SILENT_CHECK_URI =
-  typeof window !== "undefined"
-    ? `${window.location.origin}/silent-check-sso.html`
-    : "/silent-check-sso.html";
-
-const KEYCLOAK_INIT_TIMEOUT_MS = 1500;
-
-function normalizeError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(String(error));
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => void): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      onTimeout();
-      reject(new Error("Keycloak init timeout"));
-    }, timeoutMs);
-
-    promise
-      .then((value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      })
-      .catch((error: unknown) => {
-        window.clearTimeout(timer);
-        reject(normalizeError(error));
-      });
-  });
-}
-
 export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
-  const keycloakRef = useRef<KeycloakInstance | null>(
-    authConfig
-      ? new Keycloak({
-          url: authConfig.url,
-          realm: authConfig.realm,
-          clientId: authConfig.publicClientId,
-        })
-      : null,
-  );
-  const hasInitializedRef = useRef(false);
+  const authConfig = getKeycloakEnvConfig();
+  const isAuthConfigured = Boolean(authConfig);
 
-  const [state, setState] = useState<Omit<AuthContextValue, "login" | "logout" | "refresh">>(
-    () => ({
-      isEnabled: keycloakRef.current !== null,
-      isLoading: false,
-      isReady: keycloakRef.current === null,
-      isAuthenticated: false,
-      profile: null,
-      token: null,
-      tokenParsed: undefined,
-    }),
+  const navigate = useNavigate();
+
+  const accessTokenRef = useRef<string | null>(null);
+  const refreshTokenRef = useRef<string | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
+  const refreshTokensRef = useRef<() => Promise<void>>(() => Promise.resolve());
+
+  const [state, setState] = useState<Omit<AuthContextValue, "login" | "logout">>(() => ({
+    isEnabled: isAuthConfigured,
+    isLoading: false,
+    isReady: !isAuthConfigured,
+    isAuthenticated: false,
+    profile: null,
+    token: null,
+  }));
+
+  const clearRefreshTimer = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+  }, []);
+
+  const storeTokens = useCallback((tokens: StoredTokens) => {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(tokens));
+  }, []);
+
+  const removeStoredTokens = useCallback(() => {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  }, []);
+
+  const scheduleRefresh = useCallback(
+    (tokens: StoredTokens) => {
+      clearRefreshTimer();
+      const now = Date.now();
+      const delay = Math.max(tokens.expiresAt - now - REFRESH_LEEWAY_MS, 0);
+      refreshTimerRef.current = window.setTimeout(() => {
+        void refreshTokensRef.current();
+      }, delay);
+    },
+    [clearRefreshTimer],
   );
 
-  useEffect(() => {
-    const keycloak = keycloakRef.current;
-    if (!keycloak || hasInitializedRef.current) {
+  const decodeProfile = useCallback((token: string): AuthProfile | null => {
+    try {
+      const claims = jwtDecode<TokenClaims>(token);
+      const username =
+        claims.preferred_username ??
+        claims.email ??
+        claims.name ??
+        claims.sub ??
+        null;
+
+      return {
+        username,
+        email: claims.email ?? null,
+        firstName: claims.given_name ?? null,
+        lastName: claims.family_name ?? null,
+      };
+    } catch (error) {
+      console.error("Failed to decode access token", error);
+      return null;
+    }
+  }, []);
+
+  const applyTokens = useCallback(
+    (tokens: StoredTokens) => {
+      const profile = decodeProfile(tokens.accessToken);
+      if (!profile) {
+        throw new Error("Unable to decode profile from access token");
+      }
+
+      accessTokenRef.current = tokens.accessToken;
+      refreshTokenRef.current = tokens.refreshToken;
+      storeTokens(tokens);
+      scheduleRefresh(tokens);
+
+      setState({
+        isEnabled: isAuthConfigured,
+        isLoading: false,
+        isReady: true,
+        isAuthenticated: true,
+        profile,
+        token: tokens.accessToken,
+      });
+    },
+    [decodeProfile, isAuthConfigured, scheduleRefresh, storeTokens],
+  );
+
+  const normalizeTokens = useCallback(
+    (response: AuthApiResponse): StoredTokens => {
+      const now = Date.now();
+      const expiresAt = now + response.expiresIn * 1000;
+      const refreshExpiresAt = response.refreshExpiresIn
+        ? now + response.refreshExpiresIn * 1000
+        : undefined;
+
+      return {
+        tokenType: response.tokenType || "Bearer",
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+        expiresAt,
+        refreshExpiresAt,
+      };
+    },
+    [],
+  );
+
+  const performLogout = useCallback(
+    (redirect: boolean) => {
+      clearRefreshTimer();
+      accessTokenRef.current = null;
+      refreshTokenRef.current = null;
+      removeStoredTokens();
+
+      setState({
+        isEnabled: isAuthConfigured,
+        isLoading: false,
+        isReady: true,
+        isAuthenticated: false,
+        profile: null,
+        token: null,
+      });
+
+      if (redirect) {
+        void navigate("/auth/login", { replace: true });
+      }
+    },
+    [clearRefreshTimer, isAuthConfigured, navigate, removeStoredTokens],
+  );
+
+  const applyResponse = useCallback(
+    (response: AuthApiResponse) => {
+      const tokens = normalizeTokens(response);
+      applyTokens(tokens);
+    },
+    [applyTokens, normalizeTokens],
+  );
+
+  const refreshTokens = useCallback(async () => {
+    const refreshToken = refreshTokenRef.current;
+    if (!refreshToken) {
+      performLogout(true);
       return;
     }
-    hasInitializedRef.current = true;
 
-    let isMounted = true;
+    try {
+      const response = await apiFetch(
+        "/api/auth/refresh",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refreshToken }),
+        },
+        { skipAuth: true },
+      );
 
-    setState((prev) => ({
-      ...prev,
-      isEnabled: keycloakRef.current !== null,
-      isLoading: true,
-      isReady: false,
-    }));
+      if (response.status === 401) {
+        throw new Error("Refresh token invalid");
+      }
 
-    const initPromise = keycloak.init({
-      onLoad: "check-sso",
-      pkceMethod: "S256",
-      enableLogging: false,
-      silentCheckSsoRedirectUri: SILENT_CHECK_URI,
-      checkLoginIframe: true,
-      flow: "standard",
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Failed to refresh token");
+      }
+
+      const data = (await response.json()) as AuthApiResponse;
+      applyResponse(data);
+    } catch (error) {
+      console.error("Token refresh failed", error);
+      performLogout(true);
+    }
+  }, [applyResponse, performLogout]);
+
+  refreshTokensRef.current = refreshTokens;
+
+  useEffect(() => {
+    configureApiClient({
+      getAccessToken: () => accessTokenRef.current,
+      onUnauthorized: () => performLogout(true),
     });
+  }, [performLogout]);
 
-    withTimeout(initPromise, KEYCLOAK_INIT_TIMEOUT_MS, () => {
-      console.warn("Keycloak initialization timed out; disabling auth");
-    })
-      .then(async (authenticated) => {
-        if (!isMounted) {
-          return;
-        }
+  useEffect(() => {
+    if (!isAuthConfigured) {
+      setState((prev) => ({ ...prev, isReady: true }));
+      return;
+    }
 
-        if (!authenticated) {
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            isReady: true,
-            isAuthenticated: false,
-            profile: null,
-            token: null,
-            tokenParsed: undefined,
-          }));
-          return;
-        }
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) {
+      setState((prev) => ({ ...prev, isReady: true }));
+      return;
+    }
 
-        try {
-          const profile = await keycloak.loadUserProfile();
-
-          if (!isMounted) {
-            return;
-          }
-
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            isReady: true,
-            isAuthenticated: true,
-            profile,
-            token: keycloak.token ?? null,
-            tokenParsed: keycloak.tokenParsed,
-          }));
-        } catch (profileError) {
-          console.error("Failed to load Keycloak profile", profileError);
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            isReady: true,
-            isAuthenticated: true,
-            profile: null,
-            token: keycloak.token ?? null,
-            tokenParsed: keycloak.tokenParsed,
-          }));
-        }
-      })
-      .catch((error) => {
-        console.error("Keycloak initialization failed", error);
-        keycloakRef.current = null;
-        hasInitializedRef.current = false;
-        if (!isMounted) {
-          return;
-        }
-        setState((prev) => ({
-          ...prev,
-          isEnabled: false,
-          isLoading: false,
-          isReady: true,
-          isAuthenticated: false,
-          profile: null,
-          token: null,
-          tokenParsed: undefined,
-        }));
-      });
-
-    const refreshToken = () => {
-      if (!keycloak) {
-        return;
+    try {
+      const parsed = JSON.parse(raw) as StoredTokens;
+      if (!parsed.accessToken || !parsed.refreshToken || !parsed.expiresAt) {
+        throw new Error("Stored tokens incomplete");
       }
-      void keycloak
-        .updateToken(60)
-        .then((refreshed) => {
-          if (!refreshed) {
-            return;
-          }
-          setState((prev) => ({
-            ...prev,
-            token: keycloak.token ?? null,
-            tokenParsed: keycloak.tokenParsed,
-          }));
-        })
-        .catch((error) => {
-          console.error("Keycloak token refresh failed", error);
-          void keycloak.logout({ redirectUri: window.location.origin });
-        });
-    };
 
-    keycloak.onTokenExpired = () => {
-      refreshToken();
-    };
+      applyTokens(parsed);
 
-    const refreshInterval = keycloak ? window.setInterval(refreshToken, 2 * 60 * 1000) : null;
-
-    return () => {
-      isMounted = false;
-      if (refreshInterval !== null) {
-        window.clearInterval(refreshInterval);
+      if (parsed.expiresAt <= Date.now()) {
+        void refreshTokens();
       }
-    };
-  }, []);
-
-  const login = useCallback(async (options?: KeycloakLoginOptions) => {
-    const keycloak = keycloakRef.current;
-    if (!keycloak) {
-      throw new Error("Keycloak is not configured. Set VITE_KEYCLOAK_* variables.");
+    } catch (error) {
+      console.error("Failed to restore session", error);
+      performLogout(false);
     }
-    await keycloak.login({ redirectUri: window.location.href, ...options });
-  }, []);
+  }, [applyTokens, isAuthConfigured, performLogout, refreshTokens]);
 
-  const logout = useCallback(async () => {
-    const keycloak = keycloakRef.current;
-    if (!keycloak) {
-      throw new Error("Keycloak is not configured. Set VITE_KEYCLOAK_* variables.");
-    }
-    await keycloak.logout({ redirectUri: window.location.origin });
-    setState((prev) => ({
-      ...prev,
-      isAuthenticated: false,
-      profile: null,
-      token: null,
-      tokenParsed: undefined,
-    }));
-  }, []);
+  const login = useCallback(
+    async ({ email, password }: LoginCredentials) => {
+      if (!isAuthConfigured) {
+        throw new Error("Authentication is not configured");
+      }
 
-  const refresh = useCallback(async (minValidity = 60) => {
-    const keycloak = keycloakRef.current;
-    if (!keycloak) {
-      throw new Error("Keycloak is not configured. Set VITE_KEYCLOAK_* variables.");
-    }
-    const refreshed = await keycloak.updateToken(minValidity);
-    if (refreshed) {
-      setState((prev) => ({
-        ...prev,
-        token: keycloak.token ?? null,
-        tokenParsed: keycloak.tokenParsed,
-      }));
-    }
-  }, []);
+      setState((prev) => ({ ...prev, isLoading: true }));
 
-  const value = useMemo<AuthContextValue>(() => {
-    if (!state.isEnabled) {
-      return defaultValue;
-    }
+      try {
+        const response = await apiFetch(
+          "/api/auth/login",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password }),
+          },
+          { skipAuth: true },
+        );
 
+        if (response.status === 401) {
+          throw new Error("Invalid email or password");
+        }
+
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || "Unable to sign in");
+        }
+
+        const data = (await response.json()) as AuthApiResponse;
+        applyResponse(data);
+      } finally {
+        setState((prev) => ({ ...prev, isLoading: false }));
+      }
+    },
+    [applyResponse, isAuthConfigured],
+  );
+
+  const logout = useCallback(
+    (redirect = true) => {
+      performLogout(redirect);
+    },
+    [performLogout],
+  );
+
+  const contextValue = useMemo<AuthContextValue>(() => {
     return {
       ...state,
       login,
       logout,
-      refresh,
     };
-  }, [login, logout, refresh, state]);
+  }, [login, logout, state]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

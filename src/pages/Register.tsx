@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
+import { apiFetch } from "@/lib/api-client";
 import { getKeycloakEnvConfig } from "@/lib/env";
 
 type TurnstileTheme = "light" | "dark" | "auto";
@@ -207,33 +208,14 @@ function analysePassword(password: string): PasswordAnalysis {
   };
 }
 
-function splitFullName(fullName: string): { firstName: string; lastName: string } {
-  const tokens = fullName
-    .trim()
-    .split(/\s+/)
-    .filter((value) => value.length > 0);
-
-  if (tokens.length === 0) {
-    return { firstName: "", lastName: "" };
-  }
-
-  if (tokens.length === 1) {
-    return { firstName: tokens[0], lastName: "" };
-  }
-
-  return {
-    firstName: tokens[0],
-    lastName: tokens.slice(1).join(" "),
-  };
-}
-
 export function RegisterPage(): JSX.Element {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuth();
   const { resolved: resolvedTheme } = useTheme();
 
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -443,15 +425,22 @@ export function RegisterPage(): JSX.Element {
     emailIsValid &&
     passwordMatches &&
     analysis.mandatoryPassed &&
-    Boolean(fullName.trim()) &&
+    firstName.trim().length > 0 &&
+    lastName.trim().length > 0 &&
     countrySelected &&
     acceptPolicy &&
     website.trim().length === 0;
 
-  const handleFullNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFirstNameChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.value;
-    detectRapidFill(fullName, nextValue);
-    setFullName(nextValue);
+    detectRapidFill(firstName, nextValue);
+    setFirstName(nextValue);
+  };
+
+  const handleLastNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value;
+    detectRapidFill(lastName, nextValue);
+    setLastName(nextValue);
   };
 
   const handleEmailChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -505,19 +494,9 @@ export function RegisterPage(): JSX.Element {
     });
   }, [turnstileConfigured]);
 
-  const handleSocialSignIn = useCallback(
-    (provider: SocialProvider) => {
-      if (!keycloakConfig || !auth.isEnabled) {
-        return;
-      }
-      void auth.login({
-        idpHint: provider.brokerPath,
-        redirectUri: `${window.location.origin}/dashboard`,
-        locale: i18n.language,
-      });
-    },
-    [auth, i18n.language, keycloakConfig],
-  );
+  const handleSocialSignIn = useCallback((provider: SocialProvider) => {
+    console.warn("Social sign-in is not configured for provider", provider.brokerPath);
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -548,7 +527,8 @@ export function RegisterPage(): JSX.Element {
     }
 
     if (
-      !fullName.trim() ||
+      firstName.trim().length === 0 ||
+      lastName.trim().length === 0 ||
       !emailIsValid ||
       !passwordMatches ||
       !analysis.mandatoryPassed ||
@@ -631,15 +611,16 @@ export function RegisterPage(): JSX.Element {
       : `${backendBaseUrl}/`;
     const endpoint = new URL("/api/auth/register", backendUrlWithSlash);
 
-    const { firstName, lastName } = splitFullName(fullName);
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedWebsite = website.trim();
+    const normalizedFirstName = firstName.trim();
+    const normalizedLastName = lastName.trim();
 
     const payload: Record<string, unknown> = {
       email: normalizedEmail,
       password,
-      firstName,
-      lastName,
+      firstName: normalizedFirstName,
+      lastName: normalizedLastName,
       captchaToken: token,
       locale: i18n.language,
       theme: resolvedTheme ?? "system",
@@ -664,7 +645,7 @@ export function RegisterPage(): JSX.Element {
     try {
       setIsSubmitting(true);
 
-      const response = await fetch(endpoint.toString(), {
+      const response = await apiFetch(endpoint.toString(), {
         method: "POST",
         headers: {
           Accept: "application/json",
@@ -690,7 +671,8 @@ export function RegisterPage(): JSX.Element {
 
         setFormSuccess(successMessage);
         setFormError(null);
-        setFullName("");
+        setFirstName("");
+        setLastName("");
         setEmail("");
         setPassword("");
         setConfirmPassword("");
@@ -790,18 +772,33 @@ export function RegisterPage(): JSX.Element {
           />
           <div ref={turnstileContainerRef} className="hidden" aria-hidden="true" />
           <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="fullName">{t("register_full_name")}</Label>
-              <Input
-                id="fullName"
-                autoComplete="name"
-                value={fullName}
-                onChange={handleFullNameChange}
-                required
-              />
-              {attemptedSubmit && fullName.trim().length === 0 ? (
-                <p className="text-xs text-destructive">{t("register_full_name_required")}</p>
-              ) : null}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">{t("register_first_name")}</Label>
+                <Input
+                  id="firstName"
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={handleFirstNameChange}
+                  required
+                />
+                {attemptedSubmit && firstName.trim().length === 0 ? (
+                  <p className="text-xs text-destructive">{t("register_first_name_required")}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">{t("register_last_name")}</Label>
+                <Input
+                  id="lastName"
+                  autoComplete="family-name"
+                  value={lastName}
+                  onChange={handleLastNameChange}
+                  required
+                />
+                {attemptedSubmit && lastName.trim().length === 0 ? (
+                  <p className="text-xs text-destructive">{t("register_last_name_required")}</p>
+                ) : null}
+              </div>
             </div>
 
             <div className="space-y-2">
