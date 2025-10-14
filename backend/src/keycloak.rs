@@ -12,6 +12,7 @@ use crate::AppConfig;
 use crate::models::user::KeycloakUser;
 
 const TOKEN_REFRESH_LEEWAY: Duration = Duration::from_secs(60);
+const TOKEN_REFRESH_MIN_LEEWAY_SECS: u64 = 1;
 const TOKEN_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Error)]
@@ -170,9 +171,23 @@ impl KeycloakService {
                 return Duration::ZERO;
             }
 
+            let mut leeway_secs = state.expires_in / 2;
+            if leeway_secs < TOKEN_REFRESH_MIN_LEEWAY_SECS {
+                leeway_secs = TOKEN_REFRESH_MIN_LEEWAY_SECS;
+            }
+            let max_leeway = TOKEN_REFRESH_LEEWAY.as_secs();
+            if leeway_secs > max_leeway {
+                leeway_secs = max_leeway;
+            }
+            if leeway_secs >= state.expires_in {
+                leeway_secs = state.expires_in.saturating_sub(1);
+            }
+
+            let leeway = Duration::from_secs(leeway_secs);
+
             let target = state
                 .expires_at
-                .checked_sub(TOKEN_REFRESH_LEEWAY)
+                .checked_sub(leeway)
                 .unwrap_or(state.expires_at);
 
             if target <= now {
