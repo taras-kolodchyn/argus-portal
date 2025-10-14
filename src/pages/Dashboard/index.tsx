@@ -359,7 +359,7 @@ export function DashboardPage(): JSX.Element {
           <CardContent className="space-y-3">
             {visibleInsights.map((insight) => (
               <div
-                key={insight.metricId}
+                key={insight.id}
                 className="rounded-xl border border-border bg-card/60 px-4 py-3 shadow-sm"
               >
                 <p className="text-sm font-semibold leading-tight">{insight.title}</p>
@@ -384,6 +384,7 @@ export function DashboardPage(): JSX.Element {
 }
 
 interface Insight {
+  id: string;
   metricId: MetricId;
   title: string;
   description: string;
@@ -392,6 +393,7 @@ interface Insight {
 function buildInsights(metrics: DashboardMetric[], t: TFunction): Insight[] {
   const hasAlert = metrics.filter((metric) => metric.status === "alert");
   const insights: Insight[] = metrics.map((metric) => ({
+    id: `metric-${metric.id}`,
     metricId: metric.id,
     title: t("dashboard_insight_metric_status", {
       metric: t(metric.labelKey),
@@ -412,6 +414,7 @@ function buildInsights(metrics: DashboardMetric[], t: TFunction): Insight[] {
 
   if (hasAlert.length === 0 && metrics.length > 0) {
     insights.unshift({
+      id: `all-clear-${metrics[0].id}`,
       metricId: metrics[0].id,
       title: t("dashboard_insight_all_clear_title"),
       description: t("dashboard_insight_all_clear_description"),

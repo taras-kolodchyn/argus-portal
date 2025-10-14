@@ -98,9 +98,56 @@ The repository ships with a secure-by-default Keycloak + Postgres stack for loca
 
 5. (Optional) Run `make keycloak-bootstrap` to create/update the default `argus-portal-web` client in the configured realm.
 
-### Google reCAPTCHA v3
+### Social identity providers
 
-Set up Google reCAPTCHA v3, create a site key, and add `VITE_RECAPTCHA_SITE_KEY` to `.env.local`. Registration is disabled until a valid token is returned.
+`make keycloak-bootstrap` automatically configures CORS/web origins for common local URLs (http/https on `localhost` and `127.0.0.1`), and it can also provision the social brokers exposed on the registration screen. Export the relevant credentials (or set them in your shell profile) before running the target:
+
+```bash
+export VITE_KEYCLOAK_REALM=argus
+export VITE_KEYCLOAK_CLIENT_ID=argus-portal-web
+
+export KEYCLOAK_IDP_GOOGLE_CLIENT_ID=xxx
+export KEYCLOAK_IDP_GOOGLE_CLIENT_SECRET=xxx
+
+export KEYCLOAK_IDP_GITHUB_CLIENT_ID=xxx
+export KEYCLOAK_IDP_GITHUB_CLIENT_SECRET=xxx
+
+export KEYCLOAK_IDP_MICROSOFT_CLIENT_ID=xxx
+export KEYCLOAK_IDP_MICROSOFT_CLIENT_SECRET=xxx
+# Optional: export KEYCLOAK_IDP_MICROSOFT_TENANT=<tenant-id-or-common>
+
+export KEYCLOAK_IDP_APPLE_CLIENT_ID=xxx
+export KEYCLOAK_IDP_APPLE_TEAM_ID=xxx
+export KEYCLOAK_IDP_APPLE_KEY_ID=xxx
+export KEYCLOAK_IDP_APPLE_PRIVATE_KEY="$(cat path/to/AuthKey_xxx.p8)"
+
+export KEYCLOAK_IDP_FACEBOOK_CLIENT_ID=xxx
+export KEYCLOAK_IDP_FACEBOOK_CLIENT_SECRET=xxx
+
+export KEYCLOAK_IDP_INSTAGRAM_CLIENT_ID=xxx
+export KEYCLOAK_IDP_INSTAGRAM_CLIENT_SECRET=xxx
+# Optional overrides:
+# export KEYCLOAK_IDP_INSTAGRAM_SCOPE="user_profile user_media"
+# export KEYCLOAK_IDP_INSTAGRAM_AUTH_URL=https://api.instagram.com/oauth/authorize
+# export KEYCLOAK_IDP_INSTAGRAM_TOKEN_URL=https://api.instagram.com/oauth/access_token
+# export KEYCLOAK_IDP_INSTAGRAM_USERINFO_URL=https://graph.instagram.com/me?fields=id,username,account_type,name
+
+export KEYCLOAK_IDP_TIKTOK_CLIENT_ID=xxx
+export KEYCLOAK_IDP_TIKTOK_CLIENT_SECRET=xxx
+# Optional overrides:
+# export KEYCLOAK_IDP_TIKTOK_SCOPE="user.info.basic"
+# export KEYCLOAK_IDP_TIKTOK_AUTH_URL=https://www.tiktok.com/v2/auth/authorize
+# export KEYCLOAK_IDP_TIKTOK_TOKEN_URL=https://open.tiktokapis.com/v2/oauth/token
+# export KEYCLOAK_IDP_TIKTOK_USERINFO_URL=https://open.tiktokapis.com/v2/user/info/
+
+make keycloak-bootstrap
+```
+
+Any provider without the required credentials is skipped with a warning, so you can enable them incrementally.
+
+### Cloudflare Turnstile
+
+Provision an invisible Cloudflare Turnstile widget, then add `VITE_TURNSTILE_SITE_KEY` (and optionally `VITE_TURNSTILE_VERIFY_URL` if you proxy verification through your backend) to `.env.local`. Registration stays disabled until Turnstile returns a valid token.
 
 ### World Map Backend
 
@@ -112,13 +159,15 @@ npm run server
 
 The service exposes `http://localhost:4000/api/sensors?bbox=` and `/api/summary`. Configure the frontend with `VITE_API_URL` to point at this server.
 
-> **Note:** `make keycloak-up` now auto-generates `.env` with `admin` / `P@ssw0rd` for both Keycloak and Postgres. This is convenient for local development but must be replaced with strong secrets before any shared deployment.
+> **Note:** `make keycloak-up` now auto-generates `.env` with `admin` / `P@ssw0rd` for both Keycloak and Postgres and preconfigures permissive CORS headers (`KC_HTTP_RESPONSE_HEADER_ACCESS_CONTROL_*`). This is convenient for local development but must be replaced with strong secrets and locked-down origins before any shared deployment.
 >
 > The same command also creates `.env.local` with default Vite settings:
 > ```
 > VITE_KEYCLOAK_URL=https://127.0.0.1:8443
-> VITE_KEYCLOAK_REALM=master
+> VITE_KEYCLOAK_REALM=argus
 > VITE_KEYCLOAK_CLIENT_ID=argus-portal-web
+> VITE_TURNSTILE_SITE_KEY=
+> VITE_TURNSTILE_VERIFY_URL=
 > ```
 > Ensure a matching public client exists in Keycloak for these values.
 
@@ -137,9 +186,10 @@ Expose the Keycloak settings to Vite (dev or production) by creating `.env.local
 
 ```bash
 VITE_KEYCLOAK_URL=https://127.0.0.1:8443
-VITE_KEYCLOAK_REALM=master
+VITE_KEYCLOAK_REALM=argus
 VITE_KEYCLOAK_CLIENT_ID=argus-portal-web
-VITE_RECAPTCHA_SITE_KEY=your-recaptcha-site-key
+VITE_TURNSTILE_SITE_KEY=your-turnstile-site-key
+VITE_TURNSTILE_VERIFY_URL=http://localhost:8787/api/turnstile/verify
 VITE_API_URL=http://localhost:4000
 ```
 

@@ -101,7 +101,7 @@ export function AppHeader(): JSX.Element {
                   onClick={() => {
                     void auth.login();
                   }}
-                  disabled={auth.isLoading}
+                  disabled={auth.isLoading || !auth.isReady}
                 >
                   {auth.isLoading ? (
                     <>

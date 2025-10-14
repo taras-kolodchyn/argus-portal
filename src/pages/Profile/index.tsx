@@ -47,7 +47,7 @@ export function ProfilePage(): JSX.Element {
             <div className="rounded-xl border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
               {t("auth_not_configured")}
             </div>
-          ) : auth.isLoading ? (
+          ) : auth.isLoading || !auth.isReady ? (
             <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
               <UserCircle2 className="h-5 w-5 animate-pulse" />
               <span>{t("auth_loading")}</span>

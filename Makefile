@@ -9,12 +9,15 @@ include $(ENV_FILE)
 export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' $(ENV_FILE))
 endif
 
-.PHONY: help install dev lint build preview clean keycloak-cert keycloak-up keycloak-bootstrap compose-up compose-down compose-logs docker-build docker-run ensure-node-modules
+.PHONY: help install dev frontend backend up down lint build preview clean keycloak-cert keycloak-up keycloak-bootstrap compose-up compose-down compose-logs docker-build docker-run ensure-node-modules
 
 help:
 	@echo "Available targets:"
 	@echo "  make install         Install npm dependencies"
 	@echo "  make dev             Start Vite dev server (installs deps if missing)"
+	@echo "  make frontend        Alias for make dev"
+	@echo "  make backend         Start the Rust mock backend proxy"
+	@echo "  make up              Start Keycloak (bootstrap if needed), frontend, and backend"
 	@echo "  make lint            Run ESLint with type checking (installs deps if missing)"
 	@echo "  make build           Build production bundle (installs deps if missing)"
 	@echo "  make preview         Serve the built bundle"
@@ -38,6 +41,21 @@ ensure-node-modules:
 
 dev: ensure-node-modules
 	npm run dev
+
+frontend: dev
+
+backend:
+	cargo run --manifest-path backend/Cargo.toml
+
+up: keycloak-up keycloak-bootstrap lint build
+	$(MAKE) -j2 frontend backend
+
+.PHONY: down
+down:
+	@echo "[down] Stopping frontend/backends (if running) and Keycloak stack"
+	-@pkill -f "npm run dev" >/dev/null 2>&1 || true
+	-@pkill -f "cargo run --manifest-path backend/Cargo.toml" >/dev/null 2>&1 || true
+	-$(MAKE) compose-down
 
 lint: ensure-node-modules
 	npm run lint
@@ -73,15 +91,35 @@ keycloak-up:
 		'' \
 		'KEYCLOAK_ADMIN=admin' \
 		'KEYCLOAK_ADMIN_PASSWORD=P@ssw0rd' \
+		'KEYCLOAK_ADMIN_CLIENT_ID=argus-backend' \
+		'KEYCLOAK_ADMIN_CLIENT_SECRET=argus-backend-secret' \
+		'' \
+		'KC_HTTP_PORT=8080' \
+		'KEYCLOAK_BASE_URL=https://127.0.0.1:8443' \
+		'KEYCLOAK_REALM=argus' \
 		'' \
 		'KC_HOSTNAME=127.0.0.1' \
-		'KC_HTTPS_PORT=8443' > .env; \
-	echo "[keycloak-up] Writing .env.local for Vite with IP-based Keycloak URL."; \
+		'KC_HTTPS_PORT=8443' \
+		'KC_HTTP_RESPONSE_HEADER_ACCESS_CONTROL_ALLOW_ORIGIN=*' \
+		'KC_HTTP_RESPONSE_HEADER_ACCESS_CONTROL_ALLOW_METHODS=GET,POST,OPTIONS,HEAD' \
+		'KC_HTTP_RESPONSE_HEADER_ACCESS_CONTROL_ALLOW_HEADERS=*' \
+		'KC_HTTP_CORS=true' \
+		'KC_HTTP_CORS_ALLOWED_ORIGINS=*' \
+		'KC_HTTP_CORS_ALLOWED_HEADERS=origin,accept,content-type,x-requested-with,x-turnstile-action,x-turnstile-token' \
+		'KC_HTTP_CORS_ALLOWED_METHODS=GET,POST,OPTIONS,HEAD' \
+		'KEYCLOAK_TLS_INSECURE=true' > .env; \
+	echo "[keycloak-up] Writing .env.local for Vite with IP-based Keycloak URL (preserving Turnstile keys)."; \
+	existing_turnstile_site_key=$$(if [ -f .env.local ]; then grep '^VITE_TURNSTILE_SITE_KEY=' .env.local | head -n1 | cut -d= -f2-; fi); \
+	existing_turnstile_verify_url=$$(if [ -f .env.local ]; then grep '^VITE_TURNSTILE_VERIFY_URL=' .env.local | head -n1 | cut -d= -f2-; fi); \
+	existing_backend_url=$$(if [ -f .env.local ]; then grep '^VITE_BACKEND_URL=' .env.local | head -n1 | cut -d= -f2-; fi); \
+	if [ -z "$$existing_backend_url" ]; then existing_backend_url="http://127.0.0.1:8000"; fi; \
 	printf '%s\n' \
 		'VITE_KEYCLOAK_URL=https://127.0.0.1:8443' \
-		'VITE_KEYCLOAK_REALM=master' \
+		'VITE_KEYCLOAK_REALM=argus' \
 		'VITE_KEYCLOAK_CLIENT_ID=argus-portal-web' \
-		'VITE_RECAPTCHA_SITE_KEY=' > .env.local
+		"VITE_TURNSTILE_SITE_KEY=$${existing_turnstile_site_key}" \
+		"VITE_TURNSTILE_VERIFY_URL=$${existing_turnstile_verify_url}" \
+		"VITE_BACKEND_URL=$${existing_backend_url}" > .env.local
 	docker compose up -d
 
 keycloak-bootstrap:

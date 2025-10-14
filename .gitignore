@@ -25,3 +25,4 @@ certs/
 *.sln
 *.sw?
 /server/.tmp
+/backend/target

@@ -21,6 +21,7 @@ import { getKeycloakEnvConfig } from "@/lib/env";
 interface AuthContextValue {
   isEnabled: boolean;
   isLoading: boolean;
+  isReady: boolean;
   isAuthenticated: boolean;
   profile: KeycloakProfile | null;
   token: string | null;
@@ -37,6 +38,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const defaultValue: AuthContextValue = {
   isEnabled: false,
   isLoading: false,
+  isReady: true,
   isAuthenticated: false,
   profile: null,
   token: null,
@@ -60,21 +62,51 @@ const SILENT_CHECK_URI =
     ? `${window.location.origin}/silent-check-sso.html`
     : "/silent-check-sso.html";
 
+const KEYCLOAK_INIT_TIMEOUT_MS = 1500;
+
+function normalizeError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      onTimeout();
+      reject(new Error("Keycloak init timeout"));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error: unknown) => {
+        window.clearTimeout(timer);
+        reject(normalizeError(error));
+      });
+  });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
   const keycloakRef = useRef<KeycloakInstance | null>(
     authConfig
       ? new Keycloak({
           url: authConfig.url,
           realm: authConfig.realm,
-          clientId: authConfig.clientId,
+          clientId: authConfig.publicClientId,
         })
       : null,
   );
+  const hasInitializedRef = useRef(false);
 
   const [state, setState] = useState<Omit<AuthContextValue, "login" | "logout" | "refresh">>(
     () => ({
-      isEnabled: Boolean(keycloakRef.current),
-      isLoading: Boolean(keycloakRef.current),
+      isEnabled: keycloakRef.current !== null,
+      isLoading: false,
+      isReady: keycloakRef.current === null,
       isAuthenticated: false,
       profile: null,
       token: null,
@@ -84,21 +116,32 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
 
   useEffect(() => {
     const keycloak = keycloakRef.current;
-    if (!keycloak) {
+    if (!keycloak || hasInitializedRef.current) {
       return;
     }
+    hasInitializedRef.current = true;
 
     let isMounted = true;
 
-    keycloak
-      .init({
-        onLoad: "check-sso",
-        pkceMethod: "S256",
-        enableLogging: false,
-        silentCheckSsoRedirectUri: SILENT_CHECK_URI,
-        checkLoginIframe: true,
-        flow: "standard",
-      })
+    setState((prev) => ({
+      ...prev,
+      isEnabled: keycloakRef.current !== null,
+      isLoading: true,
+      isReady: false,
+    }));
+
+    const initPromise = keycloak.init({
+      onLoad: "check-sso",
+      pkceMethod: "S256",
+      enableLogging: false,
+      silentCheckSsoRedirectUri: SILENT_CHECK_URI,
+      checkLoginIframe: true,
+      flow: "standard",
+    });
+
+    withTimeout(initPromise, KEYCLOAK_INIT_TIMEOUT_MS, () => {
+      console.warn("Keycloak initialization timed out; disabling auth");
+    })
       .then(async (authenticated) => {
         if (!isMounted) {
           return;
@@ -108,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
           setState((prev) => ({
             ...prev,
             isLoading: false,
+            isReady: true,
             isAuthenticated: false,
             profile: null,
             token: null,
@@ -126,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
           setState((prev) => ({
             ...prev,
             isLoading: false,
+            isReady: true,
             isAuthenticated: true,
             profile,
             token: keycloak.token ?? null,
@@ -136,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
           setState((prev) => ({
             ...prev,
             isLoading: false,
+            isReady: true,
             isAuthenticated: true,
             profile: null,
             token: keycloak.token ?? null,
@@ -145,12 +191,16 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       })
       .catch((error) => {
         console.error("Keycloak initialization failed", error);
+        keycloakRef.current = null;
+        hasInitializedRef.current = false;
         if (!isMounted) {
           return;
         }
         setState((prev) => ({
           ...prev,
+          isEnabled: false,
           isLoading: false,
+          isReady: true,
           isAuthenticated: false,
           profile: null,
           token: null,
@@ -184,11 +234,13 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       refreshToken();
     };
 
-    const refreshInterval = window.setInterval(refreshToken, 2 * 60 * 1000);
+    const refreshInterval = keycloak ? window.setInterval(refreshToken, 2 * 60 * 1000) : null;
 
     return () => {
       isMounted = false;
-      window.clearInterval(refreshInterval);
+      if (refreshInterval !== null) {
+        window.clearInterval(refreshInterval);
+      }
     };
   }, []);
 
