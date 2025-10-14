@@ -1,34 +1,68 @@
-import type { JSX } from "react";
+import type { ComponentType, JSX, LazyExoticComponent } from "react";
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "@/components/auth/require-auth";
 import { AppLayout } from "@/components/layout/app-layout";
-import { DashboardPage } from "@/pages/Dashboard";
-import { ForecastPage } from "@/pages/Forecast";
-import { ComparePage } from "@/pages/Compare";
-import { NotificationsPage } from "@/pages/Notifications";
-import { ReportsPage } from "@/pages/Reports";
-import { ProfilePage } from "@/pages/Profile";
-import { DevicesPage } from "@/pages/Devices";
-import { LoginPage } from "@/pages/Login";
-import { RegisterPage } from "@/pages/Register";
+
+const DashboardPage = lazy(async () => ({
+  default: (await import("@/pages/Dashboard")).DashboardPage,
+}));
+const ForecastPage = lazy(async () => ({
+  default: (await import("@/pages/Forecast")).ForecastPage,
+}));
+const ComparePage = lazy(async () => ({
+  default: (await import("@/pages/Compare")).ComparePage,
+}));
+const NotificationsPage = lazy(async () => ({
+  default: (await import("@/pages/Notifications")).NotificationsPage,
+}));
+const ReportsPage = lazy(async () => ({
+  default: (await import("@/pages/Reports")).ReportsPage,
+}));
+const ProfilePage = lazy(async () => ({
+  default: (await import("@/pages/Profile")).ProfilePage,
+}));
+const DevicesPage = lazy(async () => ({
+  default: (await import("@/pages/Devices")).DevicesPage,
+}));
+const LoginPage = lazy(async () => ({
+  default: (await import("@/pages/Login")).LoginPage,
+}));
+const RegisterPage = lazy(async () => ({
+  default: (await import("@/pages/Register")).RegisterPage,
+}));
+
+const routeFallback = (
+  <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+    Loading view...
+  </div>
+);
+
+function renderLazy(Component: LazyExoticComponent<ComponentType<unknown>>): JSX.Element {
+  return (
+    <Suspense fallback={routeFallback}>
+      <Component />
+    </Suspense>
+  );
+}
 
 export function App(): JSX.Element {
   return (
     <Routes>
       <Route path="/" element={<RequireAuth><AppLayout /></RequireAuth>}>
-        <Route index element={<DashboardPage />} />
-        <Route path="forecast" element={<ForecastPage />} />
-        <Route path="compare" element={<ComparePage />} />
-        <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="devices" element={<DevicesPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="profile" element={<ProfilePage />} />
+        <Route index element={renderLazy(DashboardPage)} />
+        <Route path="forecast" element={renderLazy(ForecastPage)} />
+        <Route path="compare" element={renderLazy(ComparePage)} />
+        <Route path="notifications" element={renderLazy(NotificationsPage)} />
+        <Route path="devices" element={renderLazy(DevicesPage)} />
+        <Route path="reports" element={renderLazy(ReportsPage)} />
+        <Route path="profile" element={renderLazy(ProfilePage)} />
       </Route>
       <Route element={<AppLayout />}>
-        <Route path="register" element={<RegisterPage />} />
+        <Route path="register" element={renderLazy(RegisterPage)} />
       </Route>
-      <Route path="/auth/login" element={<LoginPage />} />
+      <Route path="/auth/login" element={renderLazy(LoginPage)} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

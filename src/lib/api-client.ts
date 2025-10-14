@@ -3,10 +3,14 @@ export interface ApiFetchOptions {
 }
 
 type TokenGetter = () => string | null;
+type RefreshHandler = () => Promise<boolean>;
 type UnauthorizedHandler = () => void;
+type SuccessHandler = () => void;
 
 let tokenGetter: TokenGetter | null = null;
 let unauthorizedHandler: UnauthorizedHandler | null = null;
+let refreshHandler: RefreshHandler | null = null;
+let successHandler: SuccessHandler | null = null;
 
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8000";
 const backendBaseUrl: string = (() => {
@@ -19,10 +23,14 @@ const backendBaseUrl: string = (() => {
 
 export function configureApiClient(options: {
   getAccessToken: TokenGetter;
+  tryRefresh: RefreshHandler;
   onUnauthorized: UnauthorizedHandler;
+  onRequestSuccess?: SuccessHandler;
 }): void {
   tokenGetter = options.getAccessToken;
   unauthorizedHandler = options.onUnauthorized;
+  refreshHandler = options.tryRefresh;
+  successHandler = options.onRequestSuccess ?? null;
 }
 
 function resolveRequest(input: RequestInfo | URL): RequestInfo | URL {
@@ -52,24 +60,50 @@ export async function apiFetch(
   const requestInit: RequestInit = { ...init };
   const headers = new Headers(init.headers ?? {});
 
-  if (!options.skipAuth && tokenGetter) {
-    const token = tokenGetter();
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
+  const applyAuthorization = () => {
+    if (options.skipAuth || !tokenGetter) {
+      return;
     }
-  }
+    const token = tokenGetter();
+    if (!token) {
+      headers.delete("Authorization");
+      return;
+    }
+    headers.set("Authorization", token);
+  };
 
+  applyAuthorization();
   if ([...headers.keys()].length > 0) {
     requestInit.headers = headers;
   }
 
   const resolvedInput = resolveRequest(input);
 
-  const response = await fetch(resolvedInput, requestInit);
+  let attempt = 0;
 
-  if (response.status === 401 && !options.skipAuth) {
-    unauthorizedHandler?.();
+  while (true) {
+    const response = await fetch(resolvedInput, requestInit);
+
+    if (response.ok) {
+      successHandler?.();
+      return response;
+    }
+
+    if (response.status === 401 && !options.skipAuth) {
+      if (attempt === 0 && refreshHandler) {
+        attempt += 1;
+        const refreshed = await refreshHandler().catch(() => false);
+        if (refreshed) {
+          applyAuthorization();
+          if ([...headers.keys()].length > 0) {
+            requestInit.headers = headers;
+          }
+          continue;
+        }
+      }
+      unauthorizedHandler?.();
+    }
+
+    return response;
   }
-
-  return response;
 }

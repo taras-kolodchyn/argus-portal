@@ -24,3 +24,9 @@ pub struct AuthResponse {
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogoutRequest {
+    pub refresh_token: String,
+}

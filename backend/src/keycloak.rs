@@ -53,6 +53,7 @@ pub struct KeycloakService {
 #[derive(Clone)]
 struct KeycloakSettings {
     token_endpoint: String,
+    logout_endpoint: String,
     users_endpoint: String,
     admin_client_id: String,
     admin_client_secret: String,
@@ -390,6 +391,45 @@ impl KeycloakService {
         self.handle_user_token_response(response).await
     }
 
+    pub async fn logout_user(&self, refresh_token: &str) -> Result<(), KeycloakError> {
+        let mut form = vec![
+            (
+                "client_id".to_string(),
+                self.settings.public_client_id.clone(),
+            ),
+            ("refresh_token".to_string(), refresh_token.to_owned()),
+        ];
+
+        if let Some(secret) = &self.settings.public_client_secret {
+            form.push(("client_secret".to_string(), secret.clone()));
+        }
+
+        let response = self
+            .client
+            .post(&self.settings.logout_endpoint)
+            .form(&form)
+            .send()
+            .await?;
+
+        let status = response.status();
+        if status.is_success() {
+            Ok(())
+        } else if status == StatusCode::BAD_REQUEST || status == StatusCode::UNAUTHORIZED {
+            // Token already invalid or expired; treat as successful logout.
+            warn!(
+                "[Login] logout returned status={} (token may already be invalid)",
+                status
+            );
+            Ok(())
+        } else {
+            let body = response.text().await.unwrap_or_default();
+            Err(KeycloakError::UnexpectedStatus {
+                status,
+                message: body,
+            })
+        }
+    }
+
     async fn handle_user_token_response(
         &self,
         response: reqwest::Response,
@@ -441,6 +481,7 @@ impl KeycloakSettings {
     fn from_config(config: &AppConfig) -> Self {
         Self {
             token_endpoint: config.keycloak_token_endpoint(),
+            logout_endpoint: config.keycloak_logout_endpoint(),
             users_endpoint: config.keycloak_users_endpoint(),
             admin_client_id: config.keycloak_admin_client_id.clone(),
             admin_client_secret: config.keycloak_admin_client_secret.clone(),

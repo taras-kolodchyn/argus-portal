@@ -4,7 +4,7 @@ use tracing::{error, info, warn};
 use crate::AppState;
 use crate::captcha::{captcha_error_status, ensure_valid};
 use crate::keycloak::{KeycloakError, UserTokenSet};
-use crate::models::auth::{AuthResponse, LoginRequest, RefreshRequest};
+use crate::models::auth::{AuthResponse, LoginRequest, LogoutRequest, RefreshRequest};
 use crate::models::user::ErrorResponse;
 
 const DEFAULT_SCOPE: &str = "openid";
@@ -60,6 +60,31 @@ pub async fn refresh_handler(
             Ok((StatusCode::OK, Json(to_auth_response(tokens))))
         }
         Err(err) => Err(map_token_error("refresh", "<hidden>", err)),
+    }
+}
+
+pub async fn logout_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<LogoutRequest>,
+) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
+    if payload.refresh_token.trim().is_empty() {
+        return Err(invalid_request("Refresh token is required"));
+    }
+
+    match state
+        .keycloak
+        .logout_user(payload.refresh_token.as_str())
+        .await
+    {
+        Ok(_) => {
+            info!("[Login] logout result=204");
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(KeycloakError::InvalidGrant { .. }) => {
+            warn!("[Login] logout invalid grant");
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(err) => Err(map_logout_error(err)),
     }
 }
 
@@ -122,4 +147,38 @@ fn invalid_request(message: &str) -> (StatusCode, Json<ErrorResponse>) {
         StatusCode::BAD_REQUEST,
         Json(ErrorResponse::new(message.to_owned())),
     )
+}
+
+fn map_logout_error(error: KeycloakError) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        KeycloakError::Request(source) => {
+            error!(?source, "[Login] logout request failed");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse::new(
+                    "Identity provider unavailable".to_owned(),
+                )),
+            )
+        }
+        KeycloakError::UnexpectedStatus { status, message } => {
+            error!("[Login] logout unexpected status={status} body={message}");
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse::new("Identity provider error".to_owned())),
+            )
+        }
+        KeycloakError::TokenUnavailable => {
+            error!("[Login] logout token unavailable");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse::new(
+                    "Identity provider unavailable".to_owned(),
+                )),
+            )
+        }
+        KeycloakError::InvalidGrant { .. } => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("Invalid refresh token".to_owned())),
+        ),
+    }
 }

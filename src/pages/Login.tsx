@@ -335,11 +335,21 @@ export function LoginPage(): JSX.Element {
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
-            {turnstileError && <p className="text-sm text-destructive">{turnstileError}</p>}
             {isCoolingDown && (
               <p className="text-sm text-muted-foreground">
                 {t("login_cooldown", { seconds: cooldownSeconds })}
               </p>
+            )}
+
+            {turnstileConfigured ? (
+              <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                {t(turnstileReady ? "login_captcha_ready" : "login_captcha_loading")}
+                {turnstileError ? <span className="ml-2 text-destructive">{turnstileError}</span> : null}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+                {t("login_captcha_disabled")}
+              </div>
             )}
 
             <div ref={turnstileContainerRef} className="hidden" aria-hidden="true" />

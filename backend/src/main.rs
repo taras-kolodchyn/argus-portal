@@ -143,6 +143,14 @@ impl AppConfig {
         )
     }
 
+    pub fn keycloak_logout_endpoint(&self) -> String {
+        format!(
+            "{}/realms/{}/protocol/openid-connect/logout",
+            self.keycloak_base(),
+            self.keycloak_realm
+        )
+    }
+
     fn keycloak_base(&self) -> String {
         self.keycloak_base_url.trim_end_matches('/').to_owned()
     }

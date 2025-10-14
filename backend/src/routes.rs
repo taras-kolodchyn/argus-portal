@@ -1,7 +1,7 @@
 use axum::{Router, http::HeaderValue, http::Method, routing::post};
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
-use crate::handlers::auth::{login_handler, refresh_handler};
+use crate::handlers::auth::{login_handler, logout_handler, refresh_handler};
 use crate::handlers::register::register_handler;
 use crate::{AppConfig, AppState};
 
@@ -12,6 +12,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/auth/register", post(register_handler))
         .route("/api/auth/login", post(login_handler))
         .route("/api/auth/refresh", post(refresh_handler))
+        .route("/api/auth/logout", post(logout_handler))
         .with_state(state)
         .layer(cors)
 }

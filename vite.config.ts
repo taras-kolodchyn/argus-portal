@@ -51,24 +51,53 @@ export default defineConfig({
             return undefined;
           }
 
-          if (id.includes("react-dom") || id.includes("react/jsx-runtime")) {
-            return "argus-react";
-          }
+          const matchers: { test: RegExp; chunk: string }[] = [
+            {
+              test: /[\\/]node_modules[\\/](react|react-dom|scheduler|use-sync-external-store)[\\/]/,
+              chunk: "argus-react",
+            },
+            {
+              test: /[\\/]node_modules[\\/]@tanstack[\\/]/,
+              chunk: "argus-query",
+            },
+            {
+              test: /[\\/]node_modules[\\/]recharts[\\/]/,
+              chunk: "argus-charts",
+            },
+            {
+              test: /[\\/]node_modules[\\/](leaflet|react-leaflet)[\\/]/,
+              chunk: "argus-maps",
+            },
+            {
+              test: /[\\/]node_modules[\\/]@radix-ui[\\/]|class-variance-authority/,
+              chunk: "argus-ui",
+            },
+            {
+              test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+              chunk: "argus-icons",
+            },
+            {
+              test: /[\\/]node_modules[\\/]react-router(?:-dom)?[\\/]/,
+              chunk: "argus-router",
+            },
+            {
+              test: /[\\/]node_modules[\\/](i18next|react-i18next)[\\/]/,
+              chunk: "argus-i18n",
+            },
+            {
+              test: /[\\/]node_modules[\\/]date-fns[\\/]/,
+              chunk: "argus-date",
+            },
+            {
+              test: /[\\/]node_modules[\\/]keycloak-js[\\/]/,
+              chunk: "argus-auth",
+            },
+          ];
 
-          if (id.includes("@tanstack")) {
-            return "argus-query";
-          }
-
-          if (id.includes("recharts")) {
-            return "argus-charts";
-          }
-
-          if (id.includes("leaflet") || id.includes("react-leaflet")) {
-            return "argus-maps";
-          }
-
-          if (id.includes("@radix-ui") || id.includes("class-variance-authority")) {
-            return "argus-ui";
+          for (const { test, chunk } of matchers) {
+            if (test.test(id)) {
+              return chunk;
+            }
           }
 
           return "argus";
