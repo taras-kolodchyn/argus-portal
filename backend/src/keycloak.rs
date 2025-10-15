@@ -6,7 +6,7 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::sleep;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::AppConfig;
 use crate::models::user::KeycloakUser;
@@ -18,24 +18,29 @@ fn compute_refresh_schedule(expires_in: u64, issued_at: Instant) -> (Instant, In
     let expires_duration = Duration::from_secs(expires_in);
     let expires_at = issued_at + expires_duration;
 
-    let half = expires_in / 2;
-    let mut leeway_secs = half;
-    if leeway_secs < TOKEN_REFRESH_MIN_LEEWAY_SECS {
-        leeway_secs = TOKEN_REFRESH_MIN_LEEWAY_SECS;
-    }
-    if leeway_secs > TOKEN_REFRESH_LEEWAY.as_secs() {
-        leeway_secs = TOKEN_REFRESH_LEEWAY.as_secs();
-    }
+    let mut leeway_secs = (expires_in / 2).clamp(
+        TOKEN_REFRESH_MIN_LEEWAY_SECS,
+        TOKEN_REFRESH_LEEWAY
+            .as_secs()
+            .max(TOKEN_REFRESH_MIN_LEEWAY_SECS),
+    );
+
     if leeway_secs >= expires_in {
-        leeway_secs = expires_in.saturating_sub(1);
+        leeway_secs = expires_in.saturating_sub(TOKEN_REFRESH_MIN_LEEWAY_SECS);
     }
 
-    let leeway = Duration::from_secs(leeway_secs);
-    let mut refresh_at = expires_at.checked_sub(leeway).unwrap_or(expires_at);
-
-    if refresh_at <= issued_at {
-        refresh_at = issued_at + Duration::from_secs(TOKEN_REFRESH_MIN_LEEWAY_SECS);
+    let mut refresh_delay = Duration::from_secs(expires_in.saturating_sub(leeway_secs));
+    if refresh_delay.is_zero() || refresh_delay >= expires_duration {
+        refresh_delay = Duration::from_secs(TOKEN_REFRESH_MIN_LEEWAY_SECS);
     }
+
+    let refresh_at = issued_at + refresh_delay;
+
+    debug!(
+        "[Keycloak] admin token scheduling: expires_in={}s, refresh_delay={}s",
+        expires_in,
+        refresh_delay.as_secs()
+    );
 
     (expires_at, refresh_at)
 }
@@ -94,6 +99,7 @@ struct TokenState {
     expires_at: Instant,
     expires_in: u64,
     next_refresh_at: Instant,
+    last_refresh_at: Instant,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,21 +197,29 @@ impl KeycloakService {
     }
 
     async fn time_until_refresh(&self) -> Duration {
-        let guard = self.state.read().await;
-        if let Some(state) = guard.as_ref() {
+        let mut guard = self.state.write().await;
+        if let Some(state) = guard.as_mut() {
             let now = Instant::now();
             if state.expires_at <= now {
                 return Duration::ZERO;
             }
 
             if state.next_refresh_at <= now {
-                Duration::from_secs(1)
-            } else {
-                state.next_refresh_at.saturating_duration_since(now)
+                let since_last = now.saturating_duration_since(state.last_refresh_at);
+                let min_interval = Duration::from_secs(5);
+                if since_last < min_interval {
+                    let delay = min_interval - since_last;
+                    state.next_refresh_at = now + delay;
+                    return delay;
+                }
+
+                return Duration::ZERO;
             }
-        } else {
-            Duration::ZERO
+
+            return state.next_refresh_at.saturating_duration_since(now);
         }
+
+        Duration::ZERO
     }
 
     pub async fn ensure_token(&self) -> Result<String, KeycloakError> {
@@ -267,6 +281,7 @@ impl KeycloakService {
             expires_in,
             expires_at,
             next_refresh_at,
+            last_refresh_at: issued_at,
         };
 
         {
@@ -275,9 +290,13 @@ impl KeycloakService {
         }
 
         if matches!(source, RefreshSource::Bootstrap | RefreshSource::Background) {
+            let refresh_delay = state
+                .next_refresh_at
+                .saturating_duration_since(issued_at)
+                .as_secs();
             info!(
-                "[Keycloak] Token obtained (source={:?}, expires_in={}s)",
-                source, state.expires_in
+                "[Keycloak] Token obtained (source={:?}, expires_in={}s, next_refresh_in={}s)",
+                source, state.expires_in, refresh_delay
             );
         }
 
