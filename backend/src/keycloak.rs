@@ -245,10 +245,20 @@ impl KeycloakService {
 
         {
             let guard = self.state.read().await;
-            if let Some(state) = guard.as_ref()
-                && state.expires_at > Instant::now() + Duration::from_secs(5)
-            {
-                return Ok(state.clone());
+            if let Some(state) = guard.as_ref() {
+                let now = Instant::now();
+                let threshold = now + Duration::from_secs(5);
+
+                let should_reuse = match source {
+                    RefreshSource::Background => {
+                        state.next_refresh_at > now && state.expires_at > threshold
+                    }
+                    _ => state.expires_at > threshold,
+                };
+
+                if should_reuse {
+                    return Ok(state.clone());
+                }
             }
         }
 
