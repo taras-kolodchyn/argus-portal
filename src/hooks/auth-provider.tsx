@@ -405,7 +405,8 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   }, []);
 
   const applyTokens = useCallback(
-    (tokens: StoredTokens, options: { broadcast?: boolean } = {}) => {
+    (tokens: StoredTokens, options: { broadcast?: boolean; recordActivity?: boolean } = {}) => {
+      const { broadcast = true, recordActivity: shouldRecord = true } = options;
       const profile = decodeProfile(tokens.accessToken);
       if (!profile) {
         throw new Error("Unable to decode access token");
@@ -432,11 +433,14 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         token: tokens.accessToken,
       });
 
-      if (options.broadcast !== false) {
+      if (broadcast) {
         broadcastSession({ type: "tokens", sourceId: sessionIdRef.current, tokens });
       }
 
-      recordActivity();
+      if (shouldRecord) {
+        recordActivity();
+      }
+
       scheduleRefresh(tokens);
     },
     [broadcastSession, decodeProfile, isAuthConfigured, recordActivity, scheduleRefresh, storeTokens],
@@ -459,7 +463,10 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   }, []);
 
   const applyResponse = useCallback(
-    (response: AuthApiResponse, options: { broadcast?: boolean } = {}) => {
+    (
+      response: AuthApiResponse,
+      options: { broadcast?: boolean; recordActivity?: boolean } = {},
+    ) => {
       const tokens = normalizeTokens(response);
       applyTokens(tokens, options);
     },
@@ -500,7 +507,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         }
 
         const data = (await response.json()) as AuthApiResponse;
-        applyResponse(data);
+        applyResponse(data, { recordActivity: false });
         return true;
       } catch (error) {
         console.error("Token refresh request failed", error);
@@ -647,7 +654,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
         }
 
         if (message.type === "tokens") {
-          applyTokens(message.tokens, { broadcast: false });
+          applyTokens(message.tokens, { broadcast: false, recordActivity: false });
         } else if (message.type === "logout") {
           void performLogout({
             redirect: true,
@@ -772,19 +779,17 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("session_timeout_title", { defaultValue: "Session will expire soon" })}</DialogTitle>
+            <DialogTitle>{t("session_timeout_title")}</DialogTitle>
             <DialogDescription>
-              {t("session_timeout_message", {
-                defaultValue: "You have been inactive for a while. Choose “Stay logged in” to continue your session.",
-              })}
+              {t("session_timeout_message")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={handleStayLoggedIn}>
-              {t("session_timeout_extend", { defaultValue: "Stay logged in" })}
+              {t("session_timeout_extend")}
             </Button>
             <Button variant="destructive" onClick={handleLogoutNow}>
-              {t("session_timeout_logout", { defaultValue: "Log out" })}
+              {t("session_timeout_logout")}
             </Button>
           </DialogFooter>
         </DialogContent>
